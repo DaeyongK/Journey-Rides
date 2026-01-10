@@ -9,7 +9,7 @@ SCHOOL_CONFIG = [
 
 async def get_pasteable_text(bot, announcement_id) -> str:
     rows = await fetchall(
-        "SELECT user_id, school, role, seats FROM ride_entries WHERE announcement_id=?",
+        "SELECT user_id, school, role, seats FROM ride_entries WHERE announcement_id=$1",
         (announcement_id,)
     )
 

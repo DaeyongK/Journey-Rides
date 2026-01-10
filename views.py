@@ -31,7 +31,7 @@ async def is_registered(announcement_id, user_id) -> bool:
         """
         SELECT 1
         FROM ride_entries
-        WHERE announcement_id=? AND user_id=?
+        WHERE announcement_id=$1 AND user_id=$2
         """,
         (announcement_id, user_id)
     )
@@ -49,22 +49,22 @@ class AnnouncementContentModal(discord.ui.Modal, title="Announcement Content"):
         max_length=4000,
     )
 
-    def __init__(self, interaction, aid, title, send_at_norm, end_at_norm, reactable):
+    def __init__(self, interaction, aid, title, send_at_dt, end_at_dt, reactable):
         super().__init__()
         self.interaction = interaction
         self.aid = aid
         self.title_val = title
-        self.send_at = send_at_norm
-        self.end_at = end_at_norm
+        self.send_at = send_at_dt
+        self.end_at = end_at_dt
         self.reactable = reactable
 
     async def on_submit(self, interaction: discord.Interaction):
         await execute(
             """
             INSERT INTO announcements (
-                id, title, send_at, end_at, content, reactable, state, message_id
+                id, title, send_at, end_at, content, reactable, state
             )
-            VALUES (?, ?, ?, ?, ?, ?, 'scheduled', NULL)
+            VALUES ($1, $2, $3, $4, $5, $6, 'scheduled')
             """,
             (
                 self.aid,
@@ -72,9 +72,10 @@ class AnnouncementContentModal(discord.ui.Modal, title="Announcement Content"):
                 self.send_at,
                 self.end_at,
                 self.content.value,
-                int(self.reactable),
+                self.reactable,
             )
         )
+
 
         await interaction.response.send_message(
             f"✅ Announcement created: `{self.aid}`",
@@ -107,8 +108,8 @@ class AnnouncementEditModal(discord.ui.Modal, title="Edit Announcement"):
         await execute(
             """
             UPDATE announcements
-            SET title=?, content=?
-            WHERE id=?
+            SET title=$1, content=$2
+            WHERE id=$3
             """,
             (
                 self.title_input.value,
@@ -121,7 +122,7 @@ class AnnouncementEditModal(discord.ui.Modal, title="Edit Announcement"):
             """
             SELECT message_id, reactable
             FROM announcements
-            WHERE id=?
+            WHERE id=$1
             """,
             (self.announcement_id,)
         )
@@ -181,8 +182,15 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
 
         await execute(
             """
-            INSERT INTO ride_entries
-            VALUES (?, ?, ?, 'driver', ?, ?)
+            INSERT INTO ride_entries (
+                announcement_id,
+                user_id,
+                school,
+                role,
+                seats,
+                updated_at
+            )
+            VALUES ($1, $2, $3, 'driver', $4, $5)
             """,
             (
                 self.announcement_id,
@@ -259,8 +267,15 @@ class RideView(discord.ui.View):
 
         await execute(
             """
-            INSERT INTO ride_entries
-            VALUES (?, ?, ?, 'rider', NULL, ?)
+            INSERT INTO ride_entries (
+                announcement_id,
+                user_id,
+                school,
+                role,
+                seats,
+                updated_at
+            )
+            VALUES ($1, $2, $3, 'rider', NULL, $4)
             """,
             (
                 self.announcement_id,
@@ -314,7 +329,7 @@ class RideView(discord.ui.View):
         await execute(
             """
             DELETE FROM ride_entries
-            WHERE announcement_id=? AND user_id=?
+            WHERE announcement_id=$1 AND user_id=$2
             """,
             (self.announcement_id, interaction.user.id)
         )

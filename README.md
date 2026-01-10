@@ -2,7 +2,7 @@
 
 A Discord bot for managing **scheduled ride announcements**, **driver/rider signups**, and **live admin dashboards** with automatic closing and exporting.
 
-Built with `discord.py` (v2), async SQLite, and persistent UI views.
+Built with `discord.py` (v2), **PostgreSQL**, and persistent UI views.
 
 ---
 
@@ -21,6 +21,7 @@ Built with `discord.py` (v2), async SQLite, and persistent UI views.
 ## 🛠 Requirements
 
 - **Python 3.10+**
+- **Docker** (for local PostgreSQL)
 - A Discord bot with:
   - Message Content Intent
   - Server Members Intent
@@ -30,6 +31,65 @@ Built with `discord.py` (v2), async SQLite, and persistent UI views.
   - School role IDs (GT / Emory / GSU)
 
 ---
+
+## 🐘 Local PostgreSQL Setup (Docker)
+
+This project uses **PostgreSQL** for both local development and production.
+To ensure parity between environments, Postgres should be run locally using Docker.
+
+---
+
+### 1️⃣ Install Docker
+
+If Docker is not already installed:
+
+- macOS / Windows: https://www.docker.com/products/docker-desktop
+- Linux: https://docs.docker.com/engine/install/
+
+Verify installation:
+
+```bash
+docker --version
+```
+
+### 2️⃣ Start PostgreSQL Container
+
+Run the following command to start a local Postgres instance:
+
+```bash
+docker run --name journey-postgres \
+  -e POSTGRES_USER=journey \
+  -e POSTGRES_PASSWORD=journey \
+  -e POSTGRES_DB=journey \
+  -p 5432:5432 \
+  -d postgres:16
+```
+
+This will:
+
+- Create a database named journey
+- Expose Postgres on localhost:5432
+- Persist data as long as the container exists
+
+### 3️⃣ Stopping / Restarting PostgreSQL
+
+Stop the database:
+
+```bash
+docker stop journey-postgres
+```
+
+Restart it later:
+
+```bash
+docker start journey-postgres
+```
+
+Remove it entirely (⚠️ deletes all data):
+
+```bash
+docker rm -f journey-postgres
+```
 
 ## 🚀 Getting Started
 
@@ -58,6 +118,8 @@ Create a .env file in the project root (real values are shared privately):
 ```bash
 DISCORD_TOKEN=your_bot_token_here
 
+DATABASE_URL=postgresql://journey:journey@localhost:5432/journey
+
 PUBLIC_CHANNEL_ID=123456789012345678
 ADMIN_CHANNEL_ID=123456789012345678
 
@@ -71,6 +133,12 @@ GSU_ROLE_ID=123456789012345678
 ```bash
 python bot.py
 ```
+
+On first startup:
+
+- A PostgreSQL connection pool is created
+
+- Database tables are initialized automatically from schema.sql
 
 You should see:
 

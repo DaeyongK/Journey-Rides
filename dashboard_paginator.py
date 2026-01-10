@@ -60,7 +60,7 @@ class DashboardPaginator(discord.ui.View):
 
         self.index -= 1
         await execute(
-            "UPDATE announcements SET dashboard_page=? WHERE id=?",
+            "UPDATE announcements SET dashboard_page=$1 WHERE id=$2",
             (self.index, self.announcement_id)
         )
 
@@ -76,7 +76,7 @@ class DashboardPaginator(discord.ui.View):
 
         self.index += 1
         await execute(
-            "UPDATE announcements SET dashboard_page=? WHERE id=?",
+            "UPDATE announcements SET dashboard_page=$1 WHERE id=$2",
             (self.index, self.announcement_id)
         )
 

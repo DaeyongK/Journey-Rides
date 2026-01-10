@@ -1,25 +1,36 @@
-import aiosqlite
-from datetime import datetime, timezone
+import os
+import asyncpg
+from dotenv import load_dotenv
+load_dotenv()
 
-DB_PATH = "rides.db"
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL is required")
+
+_pool = None
+
 
 async def init_db():
-    async with aiosqlite.connect(DB_PATH) as db:
-        with open("schema.sql") as f:
-            await db.executescript(f.read())
-        await db.commit()
+    global _pool
+    _pool = await asyncpg.create_pool(DATABASE_URL)
+
+    with open("schema.sql") as f:
+        schema = f.read()
+
+    async with _pool.acquire() as conn:
+        await conn.execute(schema)
+
 
 async def execute(query, params=()):
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(query, params)
-        await db.commit()
+    async with _pool.acquire() as conn:
+        await conn.execute(query, *params)
 
-async def fetchall(query, params=()):
-    async with aiosqlite.connect(DB_PATH) as db:
-        cur = await db.execute(query, params)
-        return await cur.fetchall()
 
 async def fetchone(query, params=()):
-    async with aiosqlite.connect(DB_PATH) as db:
-        cur = await db.execute(query, params)
-        return await cur.fetchone()
+    async with _pool.acquire() as conn:
+        return await conn.fetchrow(query, *params)
+
+
+async def fetchall(query, params=()):
+    async with _pool.acquire() as conn:
+        return await conn.fetch(query, *params)

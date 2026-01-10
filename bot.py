@@ -62,7 +62,7 @@ async def create(
     aid = str(uuid.uuid4())
 
     try:
-        send_at_norm, send_at_dt = parse_to_utc_iso(send_at)
+        send_at_dt = parse_to_utc_iso(send_at)
     except Exception:
         await interaction.response.send_message(
             "Invalid `send_at` format. Use exactly: 'YYYY-MM-DD HH:MM' in US/Eastern (e.g. 2026-01-06 15:30).",
@@ -71,7 +71,7 @@ async def create(
         return
 
     try:
-        end_at_norm, end_at_dt = parse_to_utc_iso(end_at)
+        end_at_dt = parse_to_utc_iso(end_at)
     except Exception:
         await interaction.response.send_message(
             "Invalid `end_at` format. Use exactly: 'YYYY-MM-DD HH:MM' in US/Eastern (e.g. 2026-01-06 16:30).",
@@ -91,8 +91,8 @@ async def create(
             interaction=interaction,
             aid=aid,
             title=title,
-            send_at_norm=send_at_norm,
-            end_at_norm=end_at_norm,
+            send_at_dt=send_at_dt,
+            end_at_dt=end_at_dt,
             reactable=reactable,
         )
     )
@@ -111,7 +111,7 @@ async def announcement_edit(
         """
         SELECT title, content, state
         FROM announcements
-        WHERE id=?
+        WHERE id=$1
         """,
         (announcement_id,)
     )
@@ -150,7 +150,7 @@ async def announcement_delete(
     announcement_id: str
 ):
     row = await fetchone(
-        "SELECT state FROM announcements WHERE id=?",
+        "SELECT state FROM announcements WHERE id=$1",
         (announcement_id,)
     )
 
@@ -182,7 +182,7 @@ async def announcement_unschedule(
     announcement_id: str
 ):
     row = await fetchone(
-        "SELECT state FROM announcements WHERE id=?",
+        "SELECT state FROM announcements WHERE id=$1",
         (announcement_id,)
     )
 
@@ -201,7 +201,7 @@ async def announcement_unschedule(
         return
 
     await execute(
-        "DELETE FROM announcements WHERE id=?",
+        "DELETE FROM announcements WHERE id=$1",
         (announcement_id,)
     )
 

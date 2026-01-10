@@ -1,7 +1,7 @@
 import os
 import asyncio
 from db import fetchall, execute, fetchone
-from time_utils import now, get_cutoff_iso, format_close_time
+from time_utils import now, get_cutoff_datetime, format_close_time
 from views import RideView
 from dashboard import render_dashboard, refresh_dashboard_for_announcement
 from dashboard_paginator import DashboardPaginator
@@ -45,7 +45,7 @@ async def send_scheduled_announcements(bot) -> list:
         SELECT id, title, content, reactable, end_at
         FROM announcements
         WHERE state='scheduled'
-          AND send_at <= ?
+          AND send_at <= $1
         """,
         (now(),)
     )
@@ -94,10 +94,10 @@ async def send_scheduled_announcements(bot) -> list:
             """
             UPDATE announcements
             SET state='sent',
-                message_id=?,
-                dashboard_message_id=?,
+                message_id=$1,
+                dashboard_message_id=$2,
                 dashboard_page=0
-            WHERE id=?
+            WHERE id=$3
             """,
             (msg.id, dashboard_msg_id, announcement_id)
         )
@@ -143,7 +143,7 @@ async def close_expired_announcements(bot) -> list:
         FROM announcements
         WHERE state='sent'
           AND end_at IS NOT NULL
-          AND end_at <= ?
+          AND end_at <= $1
         """,
         (now(),)
     )
@@ -162,7 +162,7 @@ async def close_expired_announcements(bot) -> list:
 
     for announcement_id, message_id, reactable in rows:
         await execute(
-            "UPDATE announcements SET state='closed' WHERE id=?",
+            "UPDATE announcements SET state='closed' WHERE id=$1",
             (announcement_id,)
         )
 
@@ -170,7 +170,7 @@ async def close_expired_announcements(bot) -> list:
             try:
                 msg = await public_ch.fetch_message(message_id)
                 row = await fetchone(
-                    "SELECT title, content FROM announcements WHERE id=?",
+                    "SELECT title, content FROM announcements WHERE id=$1",
                     (announcement_id,)
                 )
                 if row:
@@ -203,9 +203,9 @@ async def purge_old_announcements(bot):
         SELECT id
         FROM announcements
         WHERE end_at IS NOT NULL
-          AND end_at <= ?
+          AND end_at <= $1
         """,
-        (get_cutoff_iso(days=180),)
+        (get_cutoff_datetime(days=180),)
     )
     for (announcement_id,) in rows:
         success = await delete_announcement(bot, announcement_id)
@@ -222,7 +222,7 @@ async def delete_announcement(bot, announcement_id: str) -> bool:
         """
         SELECT message_id, dashboard_message_id
         FROM announcements
-        WHERE id=?
+        WHERE id=$1
         """,
         (announcement_id,)
     )
@@ -266,13 +266,13 @@ async def delete_announcement(bot, announcement_id: str) -> bool:
 
     # ──────────────── Delete DB row ────────────────
     await execute(
-        "DELETE FROM announcements WHERE id=?",
+        "DELETE FROM announcements WHERE id=$1",
         (announcement_id,)
     )
 
     # ──────────────── Delete associated ride entries ────────────────
     await execute(
-        "DELETE FROM ride_entries WHERE announcement_id=?",
+        "DELETE FROM ride_entries WHERE announcement_id=$1",
         (announcement_id,)
     )
 

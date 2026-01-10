@@ -20,7 +20,7 @@ async def render_dashboard(bot, announcement_id, title, end_at) -> list:
         """
         SELECT user_id, school, role, seats
         FROM ride_entries
-        WHERE announcement_id=?
+        WHERE announcement_id=$1
         ORDER BY school
         """,
         (announcement_id,)
@@ -116,7 +116,7 @@ async def refresh_dashboard_for_announcement(bot, announcement_id):
         """
         SELECT dashboard_message_id, dashboard_page, title, end_at
         FROM announcements
-        WHERE id=?
+        WHERE id=$1
         """,
         (announcement_id,)
     )
