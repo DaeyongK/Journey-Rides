@@ -150,13 +150,26 @@ Your slash commands will sync automatically.
 
 ## 🧭 Slash Commands Overview
 
-| Command | Description |
-|-------|-------------|
-| `/announcement_create` | Schedule a new announcement |
-| `/announcement_edit` | Edit a sent or closed announcement |
-| `/announcement_delete` | Permanently delete an announcement |
-| `/announcement_unschedule` | Remove a scheduled announcement |
-| `/announcement_view` | View all announcements and content |
+| Command | Description | Example |
+|--------|-------------|---------|
+| /announcement_create | Schedule a new announcement (refer to parameter defintions below for more information)| title:**Sunday Service Rides for 1/11/2026** send_at:**2026-01-04 08:00** end_at:**2026-01-10 23:00** reactable:**True** |
+| /announcement_edit | Edit a sent or closed announcement | announcement_id:**550e8400-e29b-41d4-a716-446655440000**
+ |
+| /announcement_delete | Permanently delete an announcement | announcement_id:**550e8400-e29b-41d4-a716-446655440000**
+ |
+| /announcement_unschedule | Remove a scheduled announcement | announcement_id:**550e8400-e29b-41d4-a716-446655440000**
+ |
+| /announcement_view | View all announcements and content | (no arguments) |
+
+
+## 📢 Creating Announcements
+
+| Parameter | Description |
+|-----------|-------------|
+| title | Title of the announcement shown in embeds and dashboards |
+| send_at | When the announcement is sent. Format: YYYY-MM-DD HH:MM (US/Eastern) |
+| end_at | When requests close. Must be same as or after send_at (US/Eastern). If the announcement is non-reactable, just enter some arbitrary time in the future.|
+| reactable | Whether users can submit ride requests and driver entries. If True, users will be able to submit ride requests and driver entries. If False, the announcement will have no buttons for submitting requests, and no admin dashboard will be displayed. In other words, it will be a simple announcement that could be used as reminders to sign up etc. |
 
 ---
 
