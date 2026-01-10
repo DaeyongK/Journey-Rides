@@ -107,6 +107,14 @@ async def announcement_edit(
     interaction: discord.Interaction,
     announcement_id: str
 ):
+    try:
+        announcement_id = uuid.UUID(announcement_id)
+    except ValueError:
+        await interaction.response.send_message(
+            "❌ Invalid announcement ID. Please provide a valid ID.",
+            ephemeral=True
+        )
+        return
     row = await fetchone(
         """
         SELECT title, content, state
@@ -149,6 +157,14 @@ async def announcement_delete(
     interaction: discord.Interaction,
     announcement_id: str
 ):
+    try:
+        announcement_id = uuid.UUID(announcement_id)
+    except ValueError:
+        await interaction.response.send_message(
+            "❌ Invalid announcement ID. Please provide a valid ID.",
+            ephemeral=True
+        )
+        return
     row = await fetchone(
         "SELECT state FROM announcements WHERE id=$1",
         (announcement_id,)
@@ -181,6 +197,14 @@ async def announcement_unschedule(
     interaction: discord.Interaction,
     announcement_id: str
 ):
+    try:
+        announcement_id = uuid.UUID(announcement_id)
+    except ValueError:
+        await interaction.response.send_message(
+            "❌ Invalid announcement ID. Please provide a valid ID.",
+            ephemeral=True
+        )
+        return
     row = await fetchone(
         "SELECT state FROM announcements WHERE id=$1",
         (announcement_id,)
