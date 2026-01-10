@@ -38,7 +38,7 @@ async def on_ready():
                 bot.add_view(DashboardPaginator(embeds, aid, title, start_index=page))
 
     # Sync commands
-    guild = discord.Object(id=1458080506158518343)
+    guild = discord.Object(id=int(os.getenv("SERVER_ID")))
     bot.tree.copy_global_to(guild=guild)
     await bot.tree.sync(guild=guild)
     
