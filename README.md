@@ -152,13 +152,10 @@ Your slash commands will sync automatically.
 
 | Command | Description | Example |
 |--------|-------------|---------|
-| /announcement_create | Schedule a new announcement (refer to parameter defintions below for more information)| title:**Sunday Service Rides for 1/11/2026** send_at:**2026-01-04 08:00** end_at:**2026-01-10 23:00** reactable:**True** |
-| /announcement_edit | Edit a sent or closed announcement | announcement_id:**550e8400-e29b-41d4-a716-446655440000**
- |
-| /announcement_delete | Permanently delete an announcement | announcement_id:**550e8400-e29b-41d4-a716-446655440000**
- |
-| /announcement_unschedule | Remove a scheduled announcement | announcement_id:**550e8400-e29b-41d4-a716-446655440000**
- |
+| /announcement_create | Schedule a new announcement (refer to parameter definitions below for more information) | title:**Sunday Service Rides for 1/11/2026**<br>send_at:**2026-01-04 08:00**<br>end_at:**2026-01-10 23:00**<br>reactable:**True** |
+| /announcement_edit | Edit a sent or closed announcement | announcement_id:**550e8400-e29b-41d4-a716-446655440000** |
+| /announcement_delete | Permanently delete an announcement | announcement_id:**550e8400-e29b-41d4-a716-446655440000** |
+| /announcement_unschedule | Remove a scheduled announcement | announcement_id:**550e8400-e29b-41d4-a716-446655440000** |
 | /announcement_view | View all announcements and content | (no arguments) |
 
 
