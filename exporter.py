@@ -1,5 +1,8 @@
 import io
+import os
 from db import fetchall
+from dotenv import load_dotenv
+load_dotenv()
 
 SCHOOL_CONFIG = [
     ("GT", "Georgia Tech"),
