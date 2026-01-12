@@ -1,12 +1,3 @@
-import io
-from db import fetchall
-
-SCHOOL_CONFIG = [
-    ("GT", "Georgia Tech"),
-    ("Emory", "Emory"),
-    ("GSU", "Georgia State"),
-]
-
 async def get_pasteable_text(bot, announcement_id) -> str:
     rows = await fetchall(
         "SELECT user_id, school, role, seats FROM ride_entries WHERE announcement_id=$1",
@@ -14,13 +5,20 @@ async def get_pasteable_text(bot, announcement_id) -> str:
     )
 
     organized = {k: {"drivers": [], "riders": []} for k, _ in SCHOOL_CONFIG}
+    guild = bot.get_guild(int(os.getenv("SERVER_ID")))
 
     for uid, school, role, seats in rows:
-        if school not in organized:
+        if school not in organized or not guild:
             continue
 
-        member = bot.get_user(uid) or await bot.fetch_user(uid)
-        name = member.display_name if member else f"User_{uid}"
+        member = guild.get_member(uid)
+        if member is None:
+            try:
+                member = await guild.fetch_member(uid)
+            except Exception:
+                continue  # skip users not in server
+
+        name = member.display_name
 
         if role == "driver":
             organized[school]["drivers"].append((name, seats))
@@ -29,7 +27,6 @@ async def get_pasteable_text(bot, announcement_id) -> str:
 
     output = io.StringIO()
 
-    # Data rows
     max_rows = max(
         max(len(v["drivers"]), len(v["riders"]))
         for v in organized.values()
@@ -51,10 +48,10 @@ async def get_pasteable_text(bot, announcement_id) -> str:
                 r_name = riders[i]
 
             row_parts += [
-                str(d_name),
+                d_name,
                 str(d_seats),
-                str(r_name),
-                ""  # checkbox column placeholder
+                r_name,
+                ""
             ]
 
         output.write("\t".join(row_parts) + "\n")
