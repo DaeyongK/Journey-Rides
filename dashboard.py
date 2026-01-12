@@ -46,7 +46,7 @@ async def render_dashboard(bot, announcement_id, title, end_at) -> list:
         if not member:
             continue
 
-        name = member.mention
+        name = f"@{member.display_name}"
         if role == "driver":
             data[school]["drivers"].append((name, seats))
         else:
