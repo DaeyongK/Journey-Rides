@@ -1,3 +1,12 @@
+import io
+from db import fetchall
+
+SCHOOL_CONFIG = [
+    ("GT", "Georgia Tech"),
+    ("Emory", "Emory"),
+    ("GSU", "Georgia State"),
+]
+
 async def get_pasteable_text(bot, announcement_id) -> str:
     rows = await fetchall(
         "SELECT user_id, school, role, seats FROM ride_entries WHERE announcement_id=$1",
