@@ -8,6 +8,7 @@ load_dotenv()
 
 SCHOOLS = ["GT", "Emory", "GSU"]
 ADMIN_CHANNEL_ID = int(os.getenv("ADMIN_CHANNEL_ID"))
+SERVER_ID = int(os.getenv("SERVER_ID"))
 
 # ─────────────────────────────────────────────────────────────
 # Dashboard Rendering:
@@ -27,20 +28,25 @@ async def render_dashboard(bot, announcement_id, title, end_at) -> list:
     )
 
     data = {s: {"drivers": [], "riders": []} for s in SCHOOLS}
+    guild = bot.get_guild(SERVER_ID)
 
     for user_id, school, role, seats in rows:
         if school not in data:
             continue
 
-        member = bot.get_user(user_id)
-        if member is None:
-            try:
-                member = await bot.fetch_user(user_id)
-            except Exception:
-                member = None
+        member = None
+        if guild:
+            member = guild.get_member(user_id)
+            if member is None:
+                try:
+                    member = await guild.fetch_member(user_id)
+                except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                    member = None
 
-        name = member.mention if member else f"<@{user_id}>"
+        if not member:
+            continue
 
+        name = member.mention
         if role == "driver":
             data[school]["drivers"].append((name, seats))
         else:
