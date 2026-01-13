@@ -168,13 +168,14 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
         self.announcement_id = announcement_id
 
     async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         school = get_school(interaction.user)
         try:
             seats = int(self.seats.value)
             if seats <= 0:
                 raise ValueError
         except ValueError:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "❌ Please enter a valid positive number of seats.",
                 ephemeral=True
             )
@@ -201,7 +202,7 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
             )
         )
 
-        await interaction.response.send_message(
+        await interaction.followup.send(
             "✅ You are now registered as a driver.",
             ephemeral=True
         )
@@ -252,7 +253,7 @@ class RideView(discord.ui.View):
         await interaction.response.defer(ephemeral=True)
         school = get_school(interaction.user)
         if not school:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "❌ You must have a school role (GT, Emory, or GSU) to request a ride.",
                 ephemeral=True
             )
@@ -260,7 +261,7 @@ class RideView(discord.ui.View):
 
         reg = await is_registered(self.announcement_id, interaction.user.id)
         if reg:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "⚠️ You are already registered. Please withdraw before switching roles.",
                 ephemeral=True
             )
@@ -286,7 +287,7 @@ class RideView(discord.ui.View):
             )
         )
 
-        await interaction.response.send_message(
+        await interaction.followup.send(
             "✅ Ride requested.",
             ephemeral=True
         )
@@ -297,7 +298,6 @@ class RideView(discord.ui.View):
         )
 
     async def driver_callback(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
         school = get_school(interaction.user)
         if not school:
 
@@ -323,7 +323,7 @@ class RideView(discord.ui.View):
         await interaction.response.defer(ephemeral=True)
         reg = await is_registered(self.announcement_id, interaction.user.id)
         if not reg:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "ℹ️ You are not registered for this announcement.",
                 ephemeral=True
             )
@@ -337,7 +337,7 @@ class RideView(discord.ui.View):
             (self.announcement_id, interaction.user.id)
         )
 
-        await interaction.response.send_message(
+        await interaction.followup.send(
             "❌ You have withdrawn.",
             ephemeral=True
         )
