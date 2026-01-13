@@ -249,6 +249,7 @@ class RideView(discord.ui.View):
     # ──────────────── Callbacks ────────────────
 
     async def request_callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         school = get_school(interaction.user)
         if not school:
             await interaction.response.send_message(
@@ -296,6 +297,7 @@ class RideView(discord.ui.View):
         )
 
     async def driver_callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         school = get_school(interaction.user)
         if not school:
 
@@ -318,6 +320,7 @@ class RideView(discord.ui.View):
         )
 
     async def withdraw_callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         reg = await is_registered(self.announcement_id, interaction.user.id)
         if not reg:
             await interaction.response.send_message(
