@@ -177,8 +177,13 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
             if seats <= 0:
                 raise ValueError("seats")
             
+            phone = self.phone.value
             if not str.isdigit(self.phone.value) or len(self.phone.value) != 10:
                 raise ValueError("phone")
+            
+            info = self.info.value
+            if len(self.info.value) > 130:
+                raise ValueError("info")
             
         except ValueError as e:
             if str(e) == "seats":
@@ -191,6 +196,11 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
                     "❌ Please enter a valid phone number (e.g 999-999-9999 without dashes).",
                     ephemeral=True
                 )
+            if str(e) == "info":
+                await interaction.followup.send(
+                    "❌ Additional information is limited to 130 characters.",
+                    ephemeral=True
+                )
             return
 
         await execute(
@@ -201,9 +211,11 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
                 school,
                 role,
                 seats,
-                updated_at
+                updated_at,
+                phone,
+                info
             )
-            VALUES ($1, $2, $3, 'driver', $4, $5)
+            VALUES ($1, $2, $3, 'driver', $4, $5, $6, $7)
             """,
             (
                 self.announcement_id,
@@ -211,6 +223,8 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
                 school,
                 seats,
                 now(),
+                phone,
+                info,
             )
         )
 
