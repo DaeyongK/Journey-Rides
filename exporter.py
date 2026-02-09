@@ -12,14 +12,14 @@ SCHOOL_CONFIG = [
 
 async def get_pasteable_text(bot, announcement_id) -> str:
     rows = await fetchall(
-        "SELECT user_id, school, role, seats FROM ride_entries WHERE announcement_id=$1",
+        "SELECT user_id, school, role, seats, phone, info FROM ride_entries WHERE announcement_id=$1",
         (announcement_id,)
     )
 
     organized = {k: {"drivers": [], "riders": []} for k, _ in SCHOOL_CONFIG}
     guild = bot.get_guild(int(os.getenv("SERVER_ID")))
 
-    for uid, school, role, seats in rows:
+    for uid, school, role, seats, phone, info in rows:
         if school not in organized or not guild:
             continue
 
@@ -33,7 +33,7 @@ async def get_pasteable_text(bot, announcement_id) -> str:
         name = member.display_name
 
         if role == "driver":
-            organized[school]["drivers"].append((name, seats))
+            organized[school]["drivers"].append((name, seats, phone, info))
         else:
             organized[school]["riders"].append(name)
 
@@ -51,17 +51,20 @@ async def get_pasteable_text(bot, announcement_id) -> str:
             drivers = organized[key]["drivers"]
             riders = organized[key]["riders"]
 
-            d_name, d_seats = ("", "")
+            d_name, d_seats, d_phone, d_info = ("", "", "", "")
             r_name = ""
 
             if i < len(drivers):
-                d_name, d_seats = drivers[i]
+                d_name, d_seats, d_phone, d_info = drivers[i]
+                d_info = d_info or "" # If d_info is null, d_info = ""
             if i < len(riders):
                 r_name = riders[i]
 
             row_parts += [
                 d_name,
                 str(d_seats),
+                d_phone, 
+                d_info, 
                 r_name,
                 ""
             ]
