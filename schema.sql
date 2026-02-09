@@ -43,6 +43,8 @@ CREATE TABLE IF NOT EXISTS ride_entries (
     seats INTEGER CHECK (seats >= 0),
 
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    phone TEXT NOT NULL,
+    info TEXT,
 
     PRIMARY KEY (announcement_id, user_id)
 );
