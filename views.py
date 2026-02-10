@@ -162,7 +162,7 @@ class AnnouncementEditModal(discord.ui.Modal, title="Edit Announcement"):
 
 class DriverModal(discord.ui.Modal, title="Driver Info"):
     seats = discord.ui.TextInput(label="Number of seats", required=True)
-    phone = discord.ui.TextInput(label="Phone Number (e.g. 999-999-9999)", required=True)
+    phone = discord.ui.TextInput(label="Phone Number (e.g. 9999999999)", required=True)
     info = discord.ui.TextInput(label="Additional Information (Optional)", required=False)
 
     def __init__(self, announcement_id):
