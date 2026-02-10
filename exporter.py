@@ -35,7 +35,7 @@ async def get_pasteable_text(bot, announcement_id) -> str:
         if role == "driver":
             organized[school]["drivers"].append((name, seats, phone, info))
         else:
-            organized[school]["riders"].append(name)
+            organized[school]["riders"].append((name, phone, info))
 
     output = io.StringIO()
 
@@ -52,13 +52,13 @@ async def get_pasteable_text(bot, announcement_id) -> str:
             riders = organized[key]["riders"]
 
             d_name, d_seats, d_phone, d_info = ("", "", "", "")
-            r_name = ""
+            r_name, r_phone, r_info = ("", "", "")
 
             if i < len(drivers):
                 d_name, d_seats, d_phone, d_info = drivers[i]
                 d_info = d_info or "" # If d_info is null, d_info = ""
             if i < len(riders):
-                r_name = riders[i]
+                r_name, r_phone, r_info = riders[i]
 
             row_parts += [
                 d_name,
@@ -66,6 +66,8 @@ async def get_pasteable_text(bot, announcement_id) -> str:
                 d_phone, 
                 d_info, 
                 r_name,
+                r_phone,
+                r_info,
                 ""
             ]
 
