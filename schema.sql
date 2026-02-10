@@ -1,7 +1,12 @@
 -- ─────────────────────────────────────────────────────────────
+-- Reset Tables (Ensures schema updates actually apply)
+-- ─────────────────────────────────────────────────────────────
+DROP TABLE IF EXISTS ride_entries CASCADE;
+DROP TABLE IF EXISTS announcements CASCADE;
+-- ─────────────────────────────────────────────────────────────
 -- Announcements
 -- ─────────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS announcements (
+CREATE TABLE announcements (
     id UUID PRIMARY KEY,
 
     title TEXT NOT NULL,
@@ -28,7 +33,7 @@ CREATE TABLE IF NOT EXISTS announcements (
 -- ─────────────────────────────────────────────────────────────
 -- Ride Entries
 -- ─────────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS ride_entries (
+CREATE TABLE ride_entries (
     announcement_id UUID NOT NULL
         REFERENCES announcements(id)
         ON DELETE CASCADE,
