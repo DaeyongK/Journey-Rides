@@ -162,6 +162,8 @@ class AnnouncementEditModal(discord.ui.Modal, title="Edit Announcement"):
 
 class DriverModal(discord.ui.Modal, title="Driver Info"):
     seats = discord.ui.TextInput(label="Number of seats", required=True)
+    phone = discord.ui.TextInput(label="Phone Number (e.g. 9999999999)", required=True)
+    info = discord.ui.TextInput(label="Additional Information (Optional)", required=False)
 
     def __init__(self, announcement_id):
         super().__init__()
@@ -173,12 +175,32 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
         try:
             seats = int(self.seats.value)
             if seats <= 0:
-                raise ValueError
-        except ValueError:
-            await interaction.followup.send(
-                "❌ Please enter a valid positive number of seats.",
-                ephemeral=True
-            )
+                raise ValueError("seats")
+            
+            phone = self.phone.value
+            if not str.isdigit(self.phone.value) or len(self.phone.value) != 10:
+                raise ValueError("phone")
+            
+            info = self.info.value
+            if len(self.info.value) > 130:
+                raise ValueError("info")
+            
+        except ValueError as e:
+            if str(e) == "seats":
+                await interaction.followup.send(
+                    "❌ Please enter a valid positive number of seats.",
+                    ephemeral=True
+                )
+            if str(e) == "phone":
+                await interaction.followup.send(
+                    "❌ Please enter a valid phone number (e.g 999-999-9999 without dashes).",
+                    ephemeral=True
+                )
+            if str(e) == "info":
+                await interaction.followup.send(
+                    "❌ Additional information is limited to 130 characters.",
+                    ephemeral=True
+                )
             return
 
         await execute(
@@ -189,9 +211,11 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
                 school,
                 role,
                 seats,
-                updated_at
+                updated_at,
+                phone,
+                info
             )
-            VALUES ($1, $2, $3, 'driver', $4, $5)
+            VALUES ($1, $2, $3, 'driver', $4, $5, $6, $7)
             """,
             (
                 self.announcement_id,
@@ -199,6 +223,8 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
                 school,
                 seats,
                 now(),
+                phone,
+                info,
             )
         )
 
