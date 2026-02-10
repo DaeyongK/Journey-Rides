@@ -238,6 +238,74 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
             self.announcement_id
         )
 
+class RiderModal(discord.ui.Modal, title = "Rider Info"):
+    phone = discord.ui.TextInput(label="Phone Number (e.g. 9999999999)", required=True)
+    info = discord.ui.TextInput(label="Additional Information (Optional)", required=False)
+
+    def __init__(self, announcement_id):
+        super().__init__()
+        self.announcement_id = announcement_id
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        school = get_school(interaction.user)
+        try:
+            
+            phone = self.phone.value
+            if not str.isdigit(self.phone.value) or len(self.phone.value) != 10:
+                raise ValueError("phone")
+            
+            info = self.info.value
+            if len(self.info.value) > 130:
+                raise ValueError("info")
+            
+        except ValueError as e:
+
+            if str(e) == "phone":
+                await interaction.followup.send(
+                    "❌ Please enter a valid phone number (e.g 999-999-9999 without dashes).",
+                    ephemeral=True
+                )
+            if str(e) == "info":
+                await interaction.followup.send(
+                    "❌ Additional information is limited to 130 characters.",
+                    ephemeral=True
+                )
+            return
+
+        await execute(
+            """
+            INSERT INTO ride_entries (
+                announcement_id,
+                user_id,
+                school,
+                role,
+                seats,
+                updated_at,
+                phone,
+                info
+            )
+            VALUES ($1, $2, $3, 'rider', NULL, $4, $5, $6)
+            """,
+            (
+                self.announcement_id,
+                interaction.user.id,
+                school,
+                now(),
+                phone,
+                info,
+            )
+        )
+
+        await interaction.followup.send(
+            "✅ You are now registered as a rider.",
+            ephemeral=True
+        )
+
+        await refresh_dashboard_for_announcement(
+            interaction.client,
+            self.announcement_id
+        )
 # ─────────────────────────────────────────────────────────────
 # Ride View (Public Buttons)
 # ─────────────────────────────────────────────────────────────
@@ -276,7 +344,6 @@ class RideView(discord.ui.View):
     # ──────────────── Callbacks ────────────────
 
     async def request_callback(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
         school = get_school(interaction.user)
         if not school:
             await interaction.followup.send(
@@ -293,34 +360,8 @@ class RideView(discord.ui.View):
             )
             return
 
-        await execute(
-            """
-            INSERT INTO ride_entries (
-                announcement_id,
-                user_id,
-                school,
-                role,
-                seats,
-                updated_at
-            )
-            VALUES ($1, $2, $3, 'rider', NULL, $4)
-            """,
-            (
-                self.announcement_id,
-                interaction.user.id,
-                school,
-                now(),
-            )
-        )
-
-        await interaction.followup.send(
-            "✅ Ride requested.",
-            ephemeral=True
-        )
-
-        await refresh_dashboard_for_announcement(
-            interaction.client,
-            self.announcement_id
+        await interaction.response.send_modal(
+            RiderModal(self.announcement_id)
         )
 
     async def driver_callback(self, interaction: discord.Interaction):
