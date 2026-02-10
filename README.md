@@ -91,6 +91,94 @@ Remove it entirely (⚠️ deletes all data):
 docker rm -f journey-postgres
 ```
 
+## 💻 Discord Bot Setup (Discord Developer Profile)
+
+This project uses **Discord Developer Profile** to set up the Discord bot, configure its permissions, and connect it to production.
+
+---
+
+### 1️⃣ Login to Discord Developer Profile
+
+1. Go to the Discord Developer Portal:  
+   https://discord.com/developers/applications
+2. Log in with the Discord account that will own the bot.
+3. Click **New Application**, give it a name, and create it.
+
+---
+
+### 2️⃣ Create the Bot User
+
+1. In the application dashboard, select **Bot** from the left sidebar.
+2. Click **Add Bot** and confirm.
+3. (Optional but recommended)
+   - Set a bot username
+   - Upload a bot avatar
+4. Enable only the **Privileged Gateway Intents** your bot actually needs.
+
+---
+
+### 3️⃣ Copy the Bot Token
+
+1. In the **Bot** tab, locate **Bot Token**.
+2. Click **Reset Token** or **Copy**.
+3. Store the token securely.
+
+⚠️ **Do not commit this token to version control or share it publicly.**
+
+Add it to your `.env` file:
+
+    DISCORD_TOKEN=your_bot_token_here
+
+---
+
+### 4️⃣ Configure Bot Permissions
+
+The bot requires the following permissions:
+
+- Manage Messages  
+- Send Messages  
+- Use External Emojis  
+- Add Reactions  
+- Embed Links  
+
+To configure permissions:
+
+1. Go to **OAuth2 → URL Generator**
+2. Under **Scopes**, select:
+   - bot
+3. Under **Bot Permissions**, enable:
+   - Manage Messages
+   - Send Messages
+   - Use External Emojis
+   - Add Reactions
+   - Embed Links
+
+An invite URL will be generated automatically.
+
+---
+
+### 5️⃣ Invite the Bot to a Server
+
+1. Copy the generated OAuth2 invite URL.
+2. Open it in your browser.
+3. Select the server to invite the bot to.
+4. Click **Authorize**.
+5. Complete the CAPTCHA.
+
+The bot will now appear in the server (offline until running).
+
+---
+
+
+
+### 🔐 Security Notes
+
+- Never expose your bot token
+- Reset the token immediately if compromised
+- Use environment variables for all secrets
+- Grant only the permissions the bot actually needs
+
+
 ## 🚀 Getting Started
 
 ### 1️⃣ Clone the Repository
