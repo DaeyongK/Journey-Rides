@@ -173,6 +173,9 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
         await interaction.response.defer(ephemeral=True)
         school = get_school(interaction.user)
         try:
+            if not str.isdigit(self.seats.value):
+                raise ValueError("seats")
+            
             seats = int(self.seats.value)
             if seats <= 0:
                 raise ValueError("seats")
