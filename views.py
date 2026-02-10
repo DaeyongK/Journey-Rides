@@ -346,7 +346,7 @@ class RideView(discord.ui.View):
     async def request_callback(self, interaction: discord.Interaction):
         school = get_school(interaction.user)
         if not school:
-            await interaction.followup.send(
+            await interaction.response.send_message(
                 "❌ You must have a school role (GT, Emory, or GSU) to request a ride.",
                 ephemeral=True
             )
@@ -354,7 +354,7 @@ class RideView(discord.ui.View):
 
         reg = await is_registered(self.announcement_id, interaction.user.id)
         if reg:
-            await interaction.followup.send(
+            await interaction.response.send_message(
                 "⚠️ You are already registered. Please withdraw before switching roles.",
                 ephemeral=True
             )
