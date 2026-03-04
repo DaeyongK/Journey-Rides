@@ -36,6 +36,7 @@ Built with `discord.py` (v2), **PostgreSQL**, and persistent UI views.
 
 This project uses **PostgreSQL** for both local development and production.
 To ensure parity between environments, Postgres should be run locally using Docker.
+**Everytime you start the bot, ensure that Postgres is running on Docker.**
 
 ---
 
