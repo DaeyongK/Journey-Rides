@@ -270,7 +270,7 @@ async def announcement_view(interaction: discord.Interaction):
     for aid, title, send_at, end_at, state, content in rows:
         # 1. Handle Field Limits (Discord limit is 25 per embed)
         # We use a lower limit (e.g., 8-10) because content previews make the embed very tall
-        if len(current_embed.fields) >= 8: 
+        if len(current_embed.fields) >= 4: 
             embeds.append(current_embed)
             current_embed = discord.Embed(color=discord.Color.blue())
 
