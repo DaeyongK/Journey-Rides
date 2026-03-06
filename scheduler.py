@@ -177,7 +177,7 @@ async def close_expired_announcements(bot) -> list:
                     title, content = row
                     new_text = (
                         f"**{title}**\n"
-                        "🔒 Requests are now closed for this announcement.\n\n"
+                        "🔒 Requests for this announcement have closed. If you need to drop or request any necessary changes, please text in #Rides-logistic. \n\n"
                         f"{content}"
                     )
                     await msg.edit(
