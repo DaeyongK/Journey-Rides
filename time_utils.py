@@ -45,7 +45,7 @@ def format_close_time(end_at: datetime) -> str:
     """
     Returns:
     - '⏳ Requests close <t:UNIX:R>'
-    - '🔒 Requests for this announcement have closed. If you need to drop or request any necessary changes, please text in #Rides-logistic.'
+    - '🔒 Requests for this announcement have closed. If you need to drop or request any necessary changes, please text in [#rides-logistics](https://discord.com/channels/1414800603686768676/1460658935001256028).'
     """
     if not isinstance(end_at, datetime):
         return "⏳ Closing time unknown"
@@ -56,7 +56,7 @@ def format_close_time(end_at: datetime) -> str:
     now_utc = datetime.now(timezone.utc)
 
     if end_at <= now_utc:
-        return "🔒 Requests for this announcement have closed. If you need to drop or request any necessary changes, please text in #Rides-logistic."
+        return "🔒 Requests for this announcement have closed. If you need to drop or request any necessary changes, please text in [#rides-logistics](https://discord.com/channels/1414800603686768676/1460658935001256028)."
 
     ts = int(end_at.timestamp())
     return f"⏳ Requests close <t:{ts}:R>"
