@@ -1,7 +1,8 @@
 import os
+from turtle import title
 import discord
 from db import execute, fetchone
-from time_utils import now
+from time_utils import format_close_time, now
 from dashboard import refresh_dashboard_for_announcement
 from dotenv import load_dotenv
 load_dotenv()
@@ -141,11 +142,33 @@ class AnnouncementEditModal(discord.ui.Modal, title="Edit Announcement"):
             if public_ch and message_id:
                 try:
                     msg = await public_ch.fetch_message(message_id)
-                    await msg.edit(
-                        content=f"**{self.title_input.value}**\n{self.content_input.value}"
+
+                    header = f"**{self.title_input.value}**"
+
+                    row = await fetchone(
+                        """
+                        SELECT end_at
+                        FROM announcements
+                        WHERE id=$1
+                        """,
+                        (self.announcement_id,)
                     )
-                except Exception:
-                    pass
+
+                    end_at = None
+                    
+                    if row:
+                        end_at = row["end_at"]
+
+                    if reactable:
+                        close_text = format_close_time(end_at)
+                        header += f"\n{close_text}"
+
+                    await msg.edit(
+                        content=f"{header}\n{self.content_input.value}"
+                    )
+
+                except Exception as e:
+                    print(e)
 
             # Refresh dashboard (if reactable)
             if reactable:
