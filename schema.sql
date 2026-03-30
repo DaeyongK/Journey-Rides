@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS announcements (
 
     title TEXT NOT NULL,
     content TEXT NOT NULL,
+    content_category TEXT,
 
     -- UTC timestamps, timezone-aware
     send_at TIMESTAMPTZ NOT NULL,
@@ -45,6 +46,7 @@ CREATE TABLE IF NOT EXISTS ride_entries (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     phone TEXT NOT NULL,
     info TEXT,
+    row_num INTEGER DEFAULT 1,
 
     PRIMARY KEY (announcement_id, user_id)
 );
