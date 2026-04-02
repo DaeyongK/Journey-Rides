@@ -51,14 +51,6 @@ class AnnouncementContentModal(discord.ui.Modal, title="Announcement Content"):
         max_length=4000,
     )
 
-    content_category = discord.ui.TextInput(
-        label = "Ride Category",
-        style=discord.TextStyle.short,
-        placeholder="F for Friday PM or S for Sunday Service",
-        required=False,
-        max_length=1,
-    )
-
     def __init__(self, interaction, aid, title, send_at_dt, end_at_dt, reactable):
         super().__init__()
         self.interaction = interaction
@@ -68,7 +60,33 @@ class AnnouncementContentModal(discord.ui.Modal, title="Announcement Content"):
         self.end_at = end_at_dt
         self.reactable = reactable
 
+        if self.reactable:
+            self.content_category = discord.ui.TextInput(
+                label="Ride Category",
+                style=discord.TextStyle.short,
+                placeholder="F for Friday PM or S for Sunday Service",
+                required=True,
+                max_length=1,
+            )
+            self.add_item(self.content_category)
+        else:
+            self.content_category = None
+
     async def on_submit(self, interaction: discord.Interaction):
+        category_value = None
+
+        if self.content_category:
+            raw_category = self.content_category.value.strip().upper()
+            
+            if raw_category not in ["F", "S"]:
+                await interaction.response.send_message(
+                    "❌ **Invalid Ride Category!** Please recreate the announcement and type exactly **F** (for Friday PM) or **S** (for Sunday Service).",
+                    ephemeral=True
+                )
+                return
+            
+            category_value = raw_category
+
         await execute(
             """
             INSERT INTO announcements (
@@ -82,11 +100,10 @@ class AnnouncementContentModal(discord.ui.Modal, title="Announcement Content"):
                 self.send_at,
                 self.end_at,
                 self.content.value,
-                self.content_category.value,
+                category_value,
                 self.reactable,
             )
         )
-
 
         await interaction.response.send_message(
             f"✅ Announcement created: `{self.aid}`",
@@ -205,16 +222,21 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
         self.announcement_id = announcement_id
 
     async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
+        # 1. Instantly send the loading message
+        await interaction.response.send_message("⏳ Registering...", ephemeral=True)
+        
         school = get_school(interaction.user).strip()
         current_count = await fetchone(
                 "SELECT MAX(row_num) FROM ride_entries WHERE announcement_id=$1 AND role=$2 AND school=$3", 
                 (self.announcement_id, "driver", school)
             )
-        content_category = await fetchone(
+        
+        # NOTE: Added the same [0] extraction here you had in your withdraw function!
+        cat_record = await fetchone(
             "SELECT content_category FROM announcements WHERE id=$1 AND reactable=$2",
             (self.announcement_id, True)
         )
+        content_category = cat_record[0] if cat_record else "F"
 
         highest_row = int(current_count[0]) if current_count and current_count[0] is not None else 0
         row_count = highest_row + 1
@@ -236,52 +258,28 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
                 raise ValueError("info")
             
         except ValueError as e:
+            # 2. Edit the loading message if validation fails
             if str(e) == "seats":
-                await interaction.followup.send(
-                    "❌ Please enter a valid positive number of seats.",
-                    ephemeral=True
-                )
+                await interaction.edit_original_response(content="❌ Please enter a valid positive number of seats.")
             if str(e) == "phone":
-                await interaction.followup.send(
-                    "❌ Please enter a valid phone number (e.g 999-999-9999 without dashes).",
-                    ephemeral=True
-                )
+                await interaction.edit_original_response(content="❌ Please enter a valid phone number (e.g 9999999999 without dashes).")
             if str(e) == "info":
-                await interaction.followup.send(
-                    "❌ Additional information is limited to 130 characters.",
-                    ephemeral=True
-                )
+                await interaction.edit_original_response(content="❌ Additional information is limited to 130 characters.")
             return
 
         await execute(
             """
             INSERT INTO ride_entries (
-                announcement_id,
-                user_id,
-                school,
-                role,
-                seats,
-                updated_at,
-                phone,
-                info,
-                row_num
+                announcement_id, user_id, school, role, seats, updated_at, phone, info, row_num
             )
             VALUES ($1, $2, $3, 'driver', $4, $5, $6, $7, $8)
             """,
-            (
-                self.announcement_id,
-                interaction.user.id,
-                school,
-                seats,
-                now(),
-                phone,
-                info,
-                row_count
-            )
+            (self.announcement_id, interaction.user.id, school, seats, now(), phone, info, row_count)
         )
 
-        print(f"DEBUG VIEWS: Generated Count for {school} {"driver"} is -> {current_count}")
+        print(f"DEBUG VIEWS: Generated Count for {school} driver is -> {current_count}")
 
+        # 3. Wait for Google Sheets to finish
         await sync_to_sheets(
                 member=interaction.user,
                 announcement_id=self.announcement_id,
@@ -290,19 +288,14 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
                 seats=seats,
                 phone=phone,
                 info=info,
-                count = row_count,
-                content_category = content_category
+                count=row_count,
+                content_category=content_category
             )
 
-        await interaction.followup.send(
-            "✅ You are now registered as a driver.",
-            ephemeral=True
-        )
+        # 4. Edit the loading message to Success!
+        await interaction.edit_original_response(content="✅ You are now registered as a driver.")
 
-        await refresh_dashboard_for_announcement(
-            interaction.client,
-            self.announcement_id
-        )
+        await refresh_dashboard_for_announcement(interaction.client, self.announcement_id)
 
 class RiderModal(discord.ui.Modal, title = "Rider Info"):
     phone = discord.ui.TextInput(label="Phone Number (e.g. 9999999999)", required=True)
@@ -313,23 +306,25 @@ class RiderModal(discord.ui.Modal, title = "Rider Info"):
         self.announcement_id = announcement_id
 
     async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
+        # 1. Instantly send the loading message
+        await interaction.response.send_message("⏳ Registering...", ephemeral=True)
+        
         school = get_school(interaction.user).strip()
         current_count = await fetchone(
                 "SELECT MAX(row_num) FROM ride_entries WHERE announcement_id=$1 AND role=$2 AND school=$3", 
                 (self.announcement_id, "rider", school)
             )
         
-        content_category = await fetchone(
+        cat_record = await fetchone(
             "SELECT content_category FROM announcements WHERE id=$1 AND reactable=$2",
             (self.announcement_id, True)
         )
+        content_category = cat_record[0] if cat_record else "F"
 
         highest_row = int(current_count[0]) if current_count and current_count[0] is not None else 0
         row_count = highest_row + 1
 
         try:
-            
             phone = self.phone.value
             if not str.isdigit(self.phone.value) or len(self.phone.value) != 10:
                 raise ValueError("phone")
@@ -339,47 +334,25 @@ class RiderModal(discord.ui.Modal, title = "Rider Info"):
                 raise ValueError("info")
             
         except ValueError as e:
-
             if str(e) == "phone":
-                await interaction.followup.send(
-                    "❌ Please enter a valid phone number (e.g 999-999-9999 without dashes).",
-                    ephemeral=True
-                )
+                await interaction.edit_original_response(content="❌ Please enter a valid phone number (e.g 9999999999 without dashes).")
             if str(e) == "info":
-                await interaction.followup.send(
-                    "❌ Additional information is limited to 130 characters.",
-                    ephemeral=True
-                )
+                await interaction.edit_original_response(content="❌ Additional information is limited to 130 characters.")
             return
 
         await execute(
             """
             INSERT INTO ride_entries (
-                announcement_id,
-                user_id,
-                school,
-                role,
-                seats,
-                updated_at,
-                phone,
-                info,
-                row_num
+                announcement_id, user_id, school, role, seats, updated_at, phone, info, row_num
             )
             VALUES ($1, $2, $3, 'rider', NULL, $4, $5, $6, $7)
             """,
-            (
-                self.announcement_id,
-                interaction.user.id,
-                school,
-                now(),
-                phone,
-                info,
-                row_count
-            )
+            (self.announcement_id, interaction.user.id, school, now(), phone, info, row_count)
         )
 
-        print(f"DEBUG VIEWS: Generated Count for {school} {"rider"} is -> {current_count}")
+        print(f"DEBUG VIEWS: Generated Count for {school} rider is -> {current_count}")
         
+        # Wait for Google Sheets
         await sync_to_sheets(
                 member=interaction.user,
                 announcement_id=self.announcement_id,
@@ -388,19 +361,14 @@ class RiderModal(discord.ui.Modal, title = "Rider Info"):
                 seats=None,
                 phone=phone,
                 info=info,
-                count = row_count,
-                content_category = content_category
+                count=row_count,
+                content_category=content_category
             )
 
-        await interaction.followup.send(
-            "✅ You are now registered as a rider.",
-            ephemeral=True
-        )
+        # Edit to Success
+        await interaction.edit_original_response(content="✅ You are now registered as a rider.")
 
-        await refresh_dashboard_for_announcement(
-            interaction.client,
-            self.announcement_id
-        )
+        await refresh_dashboard_for_announcement(interaction.client, self.announcement_id)
 # ─────────────────────────────────────────────────────────────
 # Ride View (Public Buttons)
 # ─────────────────────────────────────────────────────────────
@@ -482,7 +450,8 @@ class RideView(discord.ui.View):
         )
 
     async def withdraw_callback(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
+        # 1. Immediate loading state
+        await interaction.response.send_message("⏳ Withdrawing...", ephemeral=True)
         
         entry = await fetchone(
             "SELECT school, role, seats, phone, info, row_num FROM ride_entries WHERE user_id=$1 AND announcement_id=$2",
@@ -490,7 +459,7 @@ class RideView(discord.ui.View):
         )
 
         if not entry:
-            await interaction.followup.send("ℹ️ You are not registered for this announcement.", ephemeral=True)
+            await interaction.edit_original_response(content="ℹ️ You are not registered for this announcement.")
             return
 
         school, role, seats, phone, info, user_count = entry
@@ -502,7 +471,8 @@ class RideView(discord.ui.View):
         content_category = cat_record[0] if cat_record else "F"
 
         try:
-            asyncio.create_task(remove_from_sheets(
+            # 2. Replaced asyncio with a direct await! 
+            await remove_from_sheets(
                 interaction.user, 
                 self.announcement_id, 
                 school, 
@@ -512,24 +482,18 @@ class RideView(discord.ui.View):
                 info, 
                 user_count, 
                 content_category
-            ))
+            )
 
             await execute(
                 "DELETE FROM ride_entries WHERE announcement_id=$1 AND user_id=$2",
                 (self.announcement_id, interaction.user.id)
             )
 
-            await interaction.followup.send(
-                "❌ You have successfully withdrawn and been removed from the ride list.",
-                ephemeral=True
-            )
+            # 3. Final Success state
+            await interaction.edit_original_response(content="✅ You have successfully withdrawn and been removed from the ride list.")
 
-            await refresh_dashboard_for_announcement(
-                interaction.client,
-                self.announcement_id
-            )
+            await refresh_dashboard_for_announcement(interaction.client, self.announcement_id)
 
         except Exception as e:
             print(f"Error during withdrawal: {e}")
-            await interaction.followup.send("⚠️ Something went wrong while withdrawing. Please try again.", ephemeral=True)
-            
+            await interaction.edit_original_response(content="⚠️ Something went wrong while withdrawing. Please try again.")

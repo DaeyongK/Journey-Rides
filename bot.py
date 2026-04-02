@@ -268,24 +268,18 @@ async def announcement_view(interaction: discord.Interaction):
     )
 
     for aid, title, send_at, end_at, state, content in rows:
-        # 1. Handle Field Limits (Discord limit is 25 per embed)
-        # We use a lower limit (e.g., 8-10) because content previews make the embed very tall
+        # Handle Field Limits (Discord limit is 25 per embed)
         if len(current_embed.fields) >= 6: 
             embeds.append(current_embed)
             current_embed = discord.Embed(color=discord.Color.blue())
 
-        # 2. Format Timestamp
+        # Format Timestamp
         send_at_display = fmt_time(send_at)
         end_at_display = fmt_time(end_at) if end_at else "—"
-
-
-        # 3. Format Content Preview
-        # Truncate content to 200 chars to avoid hitting embed character limits
-        preview = content if len(content) <= 200 else content[:197] + "..."
         
         status_emoji = {"scheduled": "⏳", "sent": "✅", "closed": "🔒"}.get(state, "❓")
         
-        # 4. Add Field
+        # Add Field
         embed_value = (
             f"**ID:** `{aid}`\n"
             f"**Status:** {state.capitalize()}\n"
@@ -301,9 +295,7 @@ async def announcement_view(interaction: discord.Interaction):
 
     embeds.append(current_embed)
 
-    # Note: Discord supports up to 10 embeds per message.
-    # We slice to 10 to prevent crashes in case DB is very large.
-    await interaction.response.send_message(embeds=embeds[:10], ephemeral=True)
+    await interaction.response.send_message(embeds=embeds[:1], ephemeral=True)
 
 
 bot.run(os.getenv("DISCORD_TOKEN"))

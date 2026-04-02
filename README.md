@@ -241,7 +241,7 @@ Your slash commands will sync automatically.
 
 ## 📊 Google Sheets Setup (Apps Script Web App)
 
-This project uses a **Google Apps Script Web App** to automatically export the rides data into a Google Sheet.
+This project uses a **Google Apps Script Web App** to automatically export the rides data into a Google Sheet. Contact **Joshua Yi** if there are any issues with the Google Apps Script on deployment.
 
 ---
 

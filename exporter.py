@@ -14,6 +14,9 @@ SCHOOL_CONFIG = [
 ]
 
 GOOGLE_URL = os.getenv("GOOGLE_URL")
+_add = "add"
+_delete = "delete"
+_reset = "reset"
 
 async def sync_to_sheets(member, announcement_id, school, role, seats, phone, info, count, content_category):
     
@@ -25,7 +28,7 @@ async def sync_to_sheets(member, announcement_id, school, role, seats, phone, in
     clean_count = count[0] if type(count).__name__ == 'Record' else count
     
     payload = {
-        "action": "add",
+        "action": _add,
         "announcement_id": str(announcement_id),
         "school": str(school), 
         "role": str(role.lower().strip()),  # ensure it matches "driver" or "rider"
@@ -66,7 +69,7 @@ async def remove_from_sheets(member, announcement_id, school, role, seats, phone
 
     print(f"DEBUG VIEWS: Generated Count for {school} {"rider"} is -> {clean_count}")
     payload = {
-        "action": "delete",
+        "action": _delete,
         "announcement_id": str(announcement_id),
         "school": str(school), 
         "role": str(role).lower().strip(),  
@@ -94,7 +97,7 @@ async def remove_from_sheets(member, announcement_id, school, role, seats, phone
 
 async def trigger_sheet_reset(announcement_id, content_category):
     payload = {
-        "action": "reset",
+        "action": _reset,
         "announcement_id": str(announcement_id),
         "content_category": str(content_category)
     }

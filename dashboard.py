@@ -22,7 +22,7 @@ async def render_dashboard(bot, announcement_id, title, end_at) -> list:
         SELECT user_id, school, role, seats
         FROM ride_entries
         WHERE announcement_id=$1
-        ORDER BY school
+        ORDER BY school AND name ASC
         """,
         (announcement_id,)
     )
