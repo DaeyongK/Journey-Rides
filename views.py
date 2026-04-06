@@ -277,10 +277,8 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
             (self.announcement_id, interaction.user.id, school, seats, now(), phone, info, row_count)
         )
 
-        print(f"DEBUG VIEWS: Generated Count for {school} driver is -> {current_count}")
-
         # 3. Wait for Google Sheets to finish
-        await sync_to_sheets(
+        google_receipt = await sync_to_sheets(
                 member=interaction.user,
                 announcement_id=self.announcement_id,
                 school=school,
@@ -291,6 +289,14 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
                 count=row_count,
                 content_category=content_category
             )
+        if google_receipt is None:
+            google_receipt = "Error: No response received from Google."
+
+        if "Error" in google_receipt or "⚠️" in google_receipt:
+            await interaction.edit_original_response(
+                content=f"❌ **Google Sheets Error:**\n`{google_receipt}`\n*Please try again or contact an admin.*"
+            )
+            return
 
         # 4. Edit the loading message to Success!
         await interaction.edit_original_response(content="✅ You are now registered as a driver.")
@@ -349,11 +355,9 @@ class RiderModal(discord.ui.Modal, title = "Rider Info"):
             """,
             (self.announcement_id, interaction.user.id, school, now(), phone, info, row_count)
         )
-
-        print(f"DEBUG VIEWS: Generated Count for {school} rider is -> {current_count}")
         
         # Wait for Google Sheets
-        await sync_to_sheets(
+        google_receipt =await sync_to_sheets(
                 member=interaction.user,
                 announcement_id=self.announcement_id,
                 school=school,
@@ -364,6 +368,15 @@ class RiderModal(discord.ui.Modal, title = "Rider Info"):
                 count=row_count,
                 content_category=content_category
             )
+        
+        if google_receipt is None:
+            google_receipt = "Error: No response received from Google."
+
+        if "Error" in google_receipt or "⚠️" in google_receipt:
+            await interaction.edit_original_response(
+                content=f"❌ **Google Sheets Error:**\n`{google_receipt}`\n*Please try again or contact an admin.*"
+            )
+            return
 
         # Edit to Success
         await interaction.edit_original_response(content="✅ You are now registered as a rider.")
@@ -472,7 +485,7 @@ class RideView(discord.ui.View):
 
         try:
             # 2. Replaced asyncio with a direct await! 
-            await remove_from_sheets(
+            google_receipt = await remove_from_sheets(
                 interaction.user, 
                 self.announcement_id, 
                 school, 
@@ -488,6 +501,15 @@ class RideView(discord.ui.View):
                 "DELETE FROM ride_entries WHERE announcement_id=$1 AND user_id=$2",
                 (self.announcement_id, interaction.user.id)
             )
+
+            if google_receipt is None:
+                google_receipt = "Error: No response received from Google."
+
+            if "Error" in google_receipt or "⚠️" in google_receipt:
+                await interaction.edit_original_response(
+                    content=f"❌ **Google Sheets Error:**\n`{google_receipt}`\n*Your withdrawal was processed locally but failed to sync with Google Sheets. Please contact an admin to resolve this.*"
+                )
+                return
 
             # 3. Final Success state
             await interaction.edit_original_response(content="✅ You have successfully withdrawn and been removed from the ride list.")

@@ -39,7 +39,6 @@ async def sync_to_sheets(member, announcement_id, school, role, seats, phone, in
         "content_category": str(clean_category),
         "count": str(clean_count)
     }
-    print(f"DEBUG: Prepared payload for Sheets Sync -> {payload}")
 
     # 15 seconds is usually plenty of time for Google to respond
     timeout = aiohttp.ClientTimeout(total=15)
@@ -47,15 +46,10 @@ async def sync_to_sheets(member, announcement_id, school, role, seats, phone, in
     async with aiohttp.ClientSession(timeout=timeout) as session:
         try:
             # allow_redirects=True is required because Google Apps Script always redirects POST requests
-            print(f"DEBUG: The content category is -> '{content_category}'")
             async with session.post(GOOGLE_URL, json=payload, allow_redirects=True) as resp:
                 text = await resp.text()
                 
-                # STRICT CHECK: Must explicitly contain "Success"
-                if resp.status == 200 and "Success" in text:
-                    print(f"✅ Sheets Sync Success: {text}")
-                else:
-                    print(f"❌ Sheets Sync Failed/Ignored: {text}")
+                return text
                     
         except asyncio.TimeoutError:
             print(f"⚠️ Sheets Sync timed out for {member.display_name}. Google took too long.")
@@ -67,7 +61,6 @@ async def remove_from_sheets(member, announcement_id, school, role, seats, phone
     clean_category = content_category[0] if type(content_category).__name__ == 'Record' else content_category
     clean_count = count[0] if type(count).__name__ == 'Record' else count
 
-    print(f"DEBUG VIEWS: Generated Count for {school} {"rider"} is -> {clean_count}")
     payload = {
         "action": _delete,
         "announcement_id": str(announcement_id),
@@ -87,13 +80,10 @@ async def remove_from_sheets(member, announcement_id, school, role, seats, phone
             async with session.post(GOOGLE_URL, json=payload, allow_redirects=True) as resp:
                 text = await resp.text()
                 
-                if resp.status == 200 and "Cleared" in text:
-                    print(f"✅ Sheets Delete Success: {text}")
-                else:
-                    print(f"❌ Sheets Delete Failed/Ignored: {text}")
+                return text
                     
         except Exception as e:
-            print(f"⚠️ Sheets Delete Error: {e}")
+            return (f"⚠️ Sheets Delete Error: {e}")
 
 async def trigger_sheet_reset(announcement_id, content_category):
     payload = {

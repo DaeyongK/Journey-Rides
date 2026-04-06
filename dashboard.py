@@ -22,7 +22,7 @@ async def render_dashboard(bot, announcement_id, title, end_at) -> list:
         SELECT user_id, school, role, seats
         FROM ride_entries
         WHERE announcement_id=$1
-        ORDER BY school AND name ASC
+        ORDER BY school
         """,
         (announcement_id,)
     )
@@ -51,6 +51,10 @@ async def render_dashboard(bot, announcement_id, title, end_at) -> list:
             data[school]["drivers"].append((name, seats))
         else:
             data[school]["riders"].append(name)
+
+        for school in data:
+            data[school]["drivers"].sort(key=lambda x: x[0].casefold())
+            data[school]["riders"].sort(key=lambda x: x.casefold())
 
     # Creating First Page Cover (1/4)
     cover = discord.Embed(
