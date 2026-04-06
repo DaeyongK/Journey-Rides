@@ -2,7 +2,7 @@
 
 A Discord bot for managing **scheduled ride announcements**, **driver/rider signups**, and **live admin dashboards** with automatic closing and exporting.
 
-Built with `discord.py` (v2), **PostgreSQL**, and persistent UI views.
+Built with `discord.py` (v2), **PostgreSQL**, **Google Apps Script**, and persistent UI views.
 
 ---
 
@@ -12,6 +12,7 @@ Built with `discord.py` (v2), **PostgreSQL**, and persistent UI views.
 - ⏳ Auto-close announcements at a specified time
 - 🚘 Driver & rider signup system
 - 📊 Live admin dashboard with pagination
+- 🔄 Automatic Google Sheet Syncing
 - 📤 Exportable signup snapshots (Google Sheets–ready)
 - 🔁 Persistent buttons and views across restarts
 - 🗑 Automatic cleanup of old announcements
@@ -29,6 +30,8 @@ Built with `discord.py` (v2), **PostgreSQL**, and persistent UI views.
   - Public announcement channel
   - Admin dashboard channel
   - School role IDs (GT / Emory / GSU)
+- A Google Sheet with:
+  - Google Apps Script (set to available to anyone)
 
 ---
 
@@ -241,7 +244,7 @@ Your slash commands will sync automatically.
 
 ## 📊 Google Sheets Setup (Apps Script Web App)
 
-This project uses a **Google Apps Script Web App** to automatically export the rides data into a Google Sheet. Contact **Joshua Yi** if there are any issues with the Google Apps Script on deployment.
+This project uses a **Google Apps Script Web App** to automatically export the rides data into a Google Sheet. Contact **Joshua Yi** (@jshuao on Discord) if there are any issues with the Google Apps Script on deployment.
 
 ---
 
@@ -306,6 +309,13 @@ Add it to your `.env` file just like your Discord token:
     GOOGLE_URL=https://script.google.com/macros/s/your_long_script_id_here/exec
 
 ---
+
+### 6️⃣ (OPTIONAL) Sync to public spreadsheet
+
+1. Open the public spreadsheet and go to the import pages.
+2. Click the top-left cell where you want the data to be imported to and type:
+   ```=IMPORTRANGE("PRIVATE_SHEET_URL", "SHEET_NAME_FROM_PRIVATE_URL!A1:Z100")```
+   Do this for each page, Friday PM Imports (Private) -> Friday PM Import (Public), Sunday Service Imports (Private) -> Sunday Service Import (Public).
 
 ### 🔐 Security Notes
 
@@ -381,6 +391,7 @@ Add it to your `.env` file just like your Discord token:
 
 ### `exporter.py`
 **Export logic**
+- Automatically syncs signup data into the targeted Google Sheet
 - Converts signup data into a paste-ready tab-separated format
 - Designed for Google Sheets templates
 
