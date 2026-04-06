@@ -122,7 +122,7 @@ async def announcement_edit(
         return
     row = await fetchone(
         """
-        SELECT title, content, state
+        SELECT title, content, state, content_category
         FROM announcements
         WHERE id=$1
         """,
@@ -136,7 +136,7 @@ async def announcement_edit(
         )
         return
 
-    title, content, state = row
+    title, content, state, content_category = row
 
     if state == "scheduled":
         await interaction.response.send_message(
@@ -150,6 +150,7 @@ async def announcement_edit(
             announcement_id=announcement_id,
             old_title=title,
             old_content=content,
+            old_content_category=content_category
         )
     )
 
@@ -248,16 +249,9 @@ async def announcement_unschedule(
 async def announcement_view(interaction: discord.Interaction):
     rows = await fetchall(
         """
-        SELECT id, title, send_at, end_at, state, content
+        SELECT id, title, send_at, end_at, state, content, content_category, reactable
         FROM announcements
-        ORDER BY
-        CASE state
-            WHEN 'scheduled' THEN 1
-            WHEN 'sent' THEN 2
-            WHEN 'closed' THEN 3
-            ELSE 4
-        END,
-        send_at ASC
+        ORDER BY end_at DESC NULLS LAST
         """
     )
 
@@ -272,7 +266,7 @@ async def announcement_view(interaction: discord.Interaction):
         description="Showing all stored announcements and their content."
     )
 
-    for aid, title, send_at, end_at, state in rows:
+    for aid, title, send_at, end_at, state, *_ in rows:
         # Handle Field Limits (Discord limit is 25 per embed)
         if len(current_embed.fields) >= 6: 
             embeds.append(current_embed)

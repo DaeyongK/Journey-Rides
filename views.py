@@ -130,10 +130,25 @@ class AnnouncementEditModal(discord.ui.Modal, title="Edit Announcement"):
         self.announcement_id = announcement_id
         self.title_input.default = old_title
         self.content_input.default = old_content
-        self.content_category.default = old_content_category
+
+        if old_content_category is not None:
+            self.content_category = discord.ui.TextInput(
+                label="Ride Category",
+                style=discord.TextStyle.short,
+                placeholder="F for Friday PM or S for Sunday Service",
+                required=True,
+                max_length=1,
+                default=old_content_category
+            )
+            self.add_item(self.content_category)
+        else:
+            self.content_category = None
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
+
+        new_category = self.content_category.value if self.content_category else None
+
         await execute(
             """
             UPDATE announcements
@@ -143,7 +158,7 @@ class AnnouncementEditModal(discord.ui.Modal, title="Edit Announcement"):
             (
                 self.title_input.value,
                 self.content_input.value,
-                self.content_category.value,
+                new_category,
                 self.announcement_id,
             )
         )
