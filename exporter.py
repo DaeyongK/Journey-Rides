@@ -31,7 +31,7 @@ async def sync_to_sheets(member, announcement_id, school, role, seats, phone, in
         "action": _add,
         "announcement_id": str(announcement_id),
         "school": str(school), 
-        "role": str(role.lower().strip()),  # ensure it matches "driver" or "rider"
+        "role": str(role.lower().strip()),
         "name": str(member.display_name),
         "seats": str(seats) if seats else "",
         "phone": str(phone),
@@ -40,12 +40,10 @@ async def sync_to_sheets(member, announcement_id, school, role, seats, phone, in
         "count": str(clean_count)
     }
 
-    # 15 seconds is usually plenty of time for Google to respond
     timeout = aiohttp.ClientTimeout(total=15)
     
     async with aiohttp.ClientSession(timeout=timeout) as session:
         try:
-            # allow_redirects=True is required because Google Apps Script always redirects POST requests
             async with session.post(GOOGLE_URL, json=payload, allow_redirects=True) as resp:
                 text = await resp.text()
                 

@@ -222,7 +222,7 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
         self.announcement_id = announcement_id
 
     async def on_submit(self, interaction: discord.Interaction):
-        # 1. Instantly send the loading message
+        # Instantly send the loading message
         await interaction.response.send_message("⏳ Registering...", ephemeral=True)
         
         school = get_school(interaction.user).strip()
@@ -231,7 +231,6 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
                 (self.announcement_id, "driver", school)
             )
         
-        # NOTE: Added the same [0] extraction here you had in your withdraw function!
         cat_record = await fetchone(
             "SELECT content_category FROM announcements WHERE id=$1 AND reactable=$2",
             (self.announcement_id, True)
@@ -258,7 +257,7 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
                 raise ValueError("info")
             
         except ValueError as e:
-            # 2. Edit the loading message if validation fails
+            # Edit ephemeral response if validation fails
             if str(e) == "seats":
                 await interaction.edit_original_response(content="❌ Please enter a valid positive number of seats.")
             if str(e) == "phone":
@@ -277,7 +276,7 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
             (self.announcement_id, interaction.user.id, school, seats, now(), phone, info, row_count)
         )
 
-        # 3. Wait for Google Sheets to finish
+        # Sync to Google Sheets and wait for response
         google_receipt = await sync_to_sheets(
                 member=interaction.user,
                 announcement_id=self.announcement_id,
@@ -289,6 +288,7 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
                 count=row_count,
                 content_category=content_category
             )
+        
         if google_receipt is None:
             google_receipt = "Error: No response received from Google."
 
@@ -298,7 +298,7 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
             )
             return
 
-        # 4. Edit the loading message to Success!
+        # Edit the ephemeral message to Success!
         await interaction.edit_original_response(content="✅ You are now registered as a driver.")
 
         await refresh_dashboard_for_announcement(interaction.client, self.announcement_id)
@@ -312,7 +312,7 @@ class RiderModal(discord.ui.Modal, title = "Rider Info"):
         self.announcement_id = announcement_id
 
     async def on_submit(self, interaction: discord.Interaction):
-        # 1. Instantly send the loading message
+        # Instantly send the loading message
         await interaction.response.send_message("⏳ Registering...", ephemeral=True)
         
         school = get_school(interaction.user).strip()
@@ -339,6 +339,7 @@ class RiderModal(discord.ui.Modal, title = "Rider Info"):
             if len(self.info.value) > 130:
                 raise ValueError("info")
             
+        # Edit ephemeral message if validation fails
         except ValueError as e:
             if str(e) == "phone":
                 await interaction.edit_original_response(content="❌ Please enter a valid phone number (e.g 9999999999 without dashes).")
@@ -356,7 +357,7 @@ class RiderModal(discord.ui.Modal, title = "Rider Info"):
             (self.announcement_id, interaction.user.id, school, now(), phone, info, row_count)
         )
         
-        # Wait for Google Sheets
+        # Sync to Google Sheets and wait for response
         google_receipt =await sync_to_sheets(
                 member=interaction.user,
                 announcement_id=self.announcement_id,
@@ -378,10 +379,11 @@ class RiderModal(discord.ui.Modal, title = "Rider Info"):
             )
             return
 
-        # Edit to Success
+        # Edit ephemeral response to Success
         await interaction.edit_original_response(content="✅ You are now registered as a rider.")
 
         await refresh_dashboard_for_announcement(interaction.client, self.announcement_id)
+
 # ─────────────────────────────────────────────────────────────
 # Ride View (Public Buttons)
 # ─────────────────────────────────────────────────────────────
@@ -463,7 +465,7 @@ class RideView(discord.ui.View):
         )
 
     async def withdraw_callback(self, interaction: discord.Interaction):
-        # 1. Immediate loading state
+        # Immediate loading state in ephemeral message
         await interaction.response.send_message("⏳ Withdrawing...", ephemeral=True)
         
         entry = await fetchone(
@@ -484,7 +486,7 @@ class RideView(discord.ui.View):
         content_category = cat_record[0] if cat_record else "F"
 
         try:
-            # 2. Replaced asyncio with a direct await! 
+            # Wait for Google Sheets response before confirming withdrawal to user
             google_receipt = await remove_from_sheets(
                 interaction.user, 
                 self.announcement_id, 
@@ -511,7 +513,7 @@ class RideView(discord.ui.View):
                 )
                 return
 
-            # 3. Final Success state
+            # Edit ephemeral response to confirm successful withdrawal
             await interaction.edit_original_response(content="✅ You have successfully withdrawn and been removed from the ride list.")
 
             await refresh_dashboard_for_announcement(interaction.client, self.announcement_id)
