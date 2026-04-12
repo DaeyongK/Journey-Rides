@@ -60,3 +60,20 @@ CREATE INDEX IF NOT EXISTS idx_announcements_end_at
 
 CREATE INDEX IF NOT EXISTS idx_ride_entries_announcement
     ON ride_entries (announcement_id);
+
+-- ─────────────────────────────────────────────────────────────
+-- Saved Information
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS saved_info (
+    -- Discord user ID (snowflake)
+    user_id BIGINT NOT NULL,
+
+    role TEXT NOT NULL,
+
+    -- Only meaningful for drivers
+    seats INTEGER CHECK (seats >= 0),
+
+    phone TEXT NOT NULL,
+
+    PRIMARY KEY (user_id)
+);

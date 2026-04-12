@@ -41,7 +41,7 @@ async def on_ready():
     guild = discord.Object(id=int(os.getenv("SERVER_ID")))
     bot.tree.copy_global_to(guild=guild)
     await bot.tree.sync(guild=guild)
-    
+
     # Start scheduler loop
     bot.loop.create_task(scheduler_loop(bot))
 

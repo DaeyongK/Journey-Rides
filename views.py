@@ -254,6 +254,24 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
             )
         )
 
+        # Stores information
+        await execute(
+        """
+        INSERT INTO saved_info (
+            user_id,
+            role,
+            seats,
+            phone
+        )
+        VALUES ($1, 'driver', $2, $3)
+        """,
+        (
+            interaction.user.id,
+            seats,
+            phone,
+        )
+        )
+
         await interaction.followup.send(
             "✅ You are now registered as a driver.",
             ephemeral=True
@@ -267,7 +285,7 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
 class RiderModal(discord.ui.Modal, title = "Rider Info"):
     phone = discord.ui.TextInput(label="Phone Number (e.g. 9999999999)", required=True)
     info = discord.ui.TextInput(label="Additional Information (Optional)", required=False)
-
+    # Have a "save info" button
     def __init__(self, announcement_id):
         super().__init__()
         self.announcement_id = announcement_id
@@ -323,6 +341,23 @@ class RiderModal(discord.ui.Modal, title = "Rider Info"):
             )
         )
 
+        # Stores information
+        await execute(
+        """
+        INSERT INTO saved_info (
+            user_id,
+            role,
+            seats,
+            phone
+        )
+        VALUES ($1, 'rider', NULL, $2)
+        """,
+        (
+            interaction.user.id,
+            phone,
+        )
+        )
+
         await interaction.followup.send(
             "✅ You are now registered as a rider.",
             ephemeral=True
@@ -332,6 +367,7 @@ class RiderModal(discord.ui.Modal, title = "Rider Info"):
             interaction.client,
             self.announcement_id
         )
+
 # ─────────────────────────────────────────────────────────────
 # Ride View (Public Buttons)
 # ─────────────────────────────────────────────────────────────
