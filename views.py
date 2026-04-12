@@ -155,7 +155,7 @@ class AnnouncementEditModal(discord.ui.Modal, title="Edit Announcement"):
                     )
 
                     end_at = None
-                    
+
                     if row:
                         end_at = row["end_at"]
 
@@ -188,9 +188,12 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
     phone = discord.ui.TextInput(label="Phone Number (e.g. 9999999999)", required=True)
     info = discord.ui.TextInput(label="Additional Information (Optional)", required=False)
 
-    def __init__(self, announcement_id):
+    def __init__(self, announcement_id, default_seats=None, default_number=None):
         super().__init__()
         self.announcement_id = announcement_id
+        if (default_seats):
+            self.seats.default = default_seats
+            self.phone.default = default_number
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
@@ -198,19 +201,19 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
         try:
             if not str.isdigit(self.seats.value):
                 raise ValueError("seats")
-            
+
             seats = int(self.seats.value)
             if seats <= 0:
                 raise ValueError("seats")
-            
+
             phone = self.phone.value
             if not str.isdigit(self.phone.value) or len(self.phone.value) != 10:
                 raise ValueError("phone")
-            
+
             info = self.info.value
             if len(self.info.value) > 130:
                 raise ValueError("info")
-            
+
         except ValueError as e:
             if str(e) == "seats":
                 await interaction.followup.send(
@@ -286,23 +289,25 @@ class RiderModal(discord.ui.Modal, title = "Rider Info"):
     phone = discord.ui.TextInput(label="Phone Number (e.g. 9999999999)", required=True)
     info = discord.ui.TextInput(label="Additional Information (Optional)", required=False)
     # Have a "save info" button
-    def __init__(self, announcement_id):
+    def __init__(self, announcement_id, default_number):
         super().__init__()
         self.announcement_id = announcement_id
+        if (default_number):
+            self.phone.default = default_number
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         school = get_school(interaction.user)
         try:
-            
+
             phone = self.phone.value
             if not str.isdigit(self.phone.value) or len(self.phone.value) != 10:
                 raise ValueError("phone")
-            
+
             info = self.info.value
             if len(self.info.value) > 130:
                 raise ValueError("info")
-            
+
         except ValueError as e:
 
             if str(e) == "phone":
@@ -422,8 +427,22 @@ class RideView(discord.ui.View):
             )
             return
 
+        saved = await fetchone(
+        """
+        SELECT phone
+        FROM saved_info
+        WHERE user_id=$1
+        """,
+        (interaction.user.id,)
+        )
+
+        default_number = None
+
+        if saved:
+            default_number = saved["phone"]
+
         await interaction.response.send_modal(
-            RiderModal(self.announcement_id)
+            RiderModal(self.announcement_id, default_number)
         )
 
     async def driver_callback(self, interaction: discord.Interaction):
@@ -444,8 +463,24 @@ class RideView(discord.ui.View):
             )
             return
 
+        saved = await fetchone(
+        """
+        SELECT seats, phone
+        FROM saved_info
+        WHERE user_id=$1
+        """,
+        (interaction.user.id,)
+        )
+
+        default_seats = None
+        default_number = None
+
+        if saved:
+            default_seats = saved["seats"]
+            default_number = saved["phone"]
+
         await interaction.response.send_modal(
-            DriverModal(self.announcement_id)
+            DriverModal(self.announcement_id, default_seats, default_number)
         )
 
     async def withdraw_callback(self, interaction: discord.Interaction):
