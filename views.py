@@ -244,19 +244,12 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
         await interaction.response.send_message("⏳ Registering...", ephemeral=True)
         
         school = get_school(interaction.user).strip()
-        current_count = await fetchone(
-                "SELECT MAX(row_num) FROM ride_entries WHERE announcement_id=$1 AND role=$2 AND school=$3", 
-                (self.announcement_id, "driver", school)
-            )
         
         cat_record = await fetchone(
             "SELECT content_category FROM announcements WHERE id=$1 AND reactable=$2",
             (self.announcement_id, True)
         )
         content_category = cat_record[0] if cat_record else "F"
-
-        highest_row = int(current_count[0]) if current_count and current_count[0] is not None else 0
-        row_count = highest_row + 1
 
         try:
             if not str.isdigit(self.seats.value):
@@ -284,15 +277,24 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
                 await interaction.edit_original_response(content="❌ Additional information is limited to 130 characters.")
             return
 
-        await execute(
+        row = await fetchone(
             """
             INSERT INTO ride_entries (
                 announcement_id, user_id, school, role, seats, updated_at, phone, info, row_num
             )
-            VALUES ($1, $2, $3, 'driver', $4, $5, $6, $7, $8)
+            SELECT
+                $1, $2, $3, 'driver', $4, NOW(), $5, $6,
+                COALESCE(MAX(row_num), 0) + 1
+            FROM ride_entries
+            WHERE announcement_id = $1
+              AND role = 'driver'
+              AND school = $3
+            RETURNING row_num
             """,
-            (self.announcement_id, interaction.user.id, school, seats, now(), phone, info, row_count)
+            (self.announcement_id, interaction.user.id, school, seats, phone, info)
         )
+        
+        row_count = row["row_num"]
 
         # Sync to Google Sheets and wait for response
         google_receipt = await sync_to_sheets(
@@ -357,19 +359,12 @@ class RiderModal(discord.ui.Modal, title = "Rider Info"):
         await interaction.response.send_message("⏳ Registering...", ephemeral=True)
         
         school = get_school(interaction.user).strip()
-        current_count = await fetchone(
-                "SELECT MAX(row_num) FROM ride_entries WHERE announcement_id=$1 AND role=$2 AND school=$3", 
-                (self.announcement_id, "rider", school)
-            )
         
         cat_record = await fetchone(
             "SELECT content_category FROM announcements WHERE id=$1 AND reactable=$2",
             (self.announcement_id, True)
         )
         content_category = cat_record[0] if cat_record else "F"
-
-        highest_row = int(current_count[0]) if current_count and current_count[0] is not None else 0
-        row_count = highest_row + 1
 
         try:
 
@@ -390,15 +385,24 @@ class RiderModal(discord.ui.Modal, title = "Rider Info"):
                 await interaction.edit_original_response(content="❌ Additional information is limited to 130 characters.")
             return
 
-        await execute(
+        row = await fetchone(
             """
             INSERT INTO ride_entries (
                 announcement_id, user_id, school, role, seats, updated_at, phone, info, row_num
             )
-            VALUES ($1, $2, $3, 'rider', NULL, $4, $5, $6, $7)
+            SELECT
+                $1, $2, $3, 'rider', NULL, NOW(), $4, $5,
+                COALESCE(MAX(row_num), 0) + 1
+            FROM ride_entries
+            WHERE announcement_id = $1
+              AND role = 'rider'
+              AND school = $3
+            RETURNING row_num;
             """,
-            (self.announcement_id, interaction.user.id, school, now(), phone, info, row_count)
+            (self.announcement_id, interaction.user.id, school, phone, info)
         )
+        
+        row_count = row["row_num"]
         
         # Sync to Google Sheets and wait for response
         google_receipt =await sync_to_sheets(
