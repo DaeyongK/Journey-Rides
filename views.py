@@ -563,17 +563,6 @@ class RideView(discord.ui.View):
     async def withdraw_callback(self, interaction: discord.Interaction):
         # Immediate loading state in ephemeral message
         await interaction.response.send_message("⏳ Withdrawing...", ephemeral=True)
-        
-        entry = await fetchone(
-            "SELECT school, role, seats, phone, info, row_num FROM ride_entries WHERE user_id=$1 AND announcement_id=$2",
-            (interaction.user.id, self.announcement_id)
-        )
-
-        if not entry:
-            await interaction.edit_original_response(content="ℹ️ You are not registered for this announcement.")
-            return
-
-        school, role, seats, phone, info, user_count = entry
 
         cat_record = await fetchone(
             "SELECT content_category FROM announcements WHERE id=$1",
@@ -582,6 +571,21 @@ class RideView(discord.ui.View):
         content_category = cat_record[0] if cat_record else "F"
 
         try:
+            entry = await fetchone(
+                """
+                DELETE FROM ride_entries
+                WHERE user_id=$1 AND announcement_id=$2
+                RETURNING school, role, seats, phone, info, row_num
+                """,
+                (interaction.user.id, self.announcement_id)
+            )
+        
+            if not entry:
+                await interaction.edit_original_response(content="ℹ️ You are not registered for this announcement.")
+                return
+
+            school, role, seats, phone, info, user_count = entry
+            
             # Wait for Google Sheets response before confirming withdrawal to user
             google_receipt = await remove_from_sheets(
                 interaction.user, 
@@ -593,11 +597,6 @@ class RideView(discord.ui.View):
                 info, 
                 user_count, 
                 content_category
-            )
-
-            await execute(
-                "DELETE FROM ride_entries WHERE announcement_id=$1 AND user_id=$2",
-                (self.announcement_id, interaction.user.id)
             )
 
             if google_receipt is None:
