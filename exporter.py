@@ -1,5 +1,8 @@
+import asyncio
 import io
 import os
+import aiohttp
+import traceback
 from db import fetchall
 from dotenv import load_dotenv
 load_dotenv()
@@ -10,6 +13,95 @@ SCHOOL_CONFIG = [
     ("GSU", "Georgia State"),
 ]
 
+GOOGLE_URL = os.getenv("GOOGLE_URL")
+_add = "add"
+_delete = "delete"
+_reset = "reset"
+
+async def sync_to_sheets(member, announcement_id, school, role, seats, phone, info, count, content_category):
+    
+    """
+    Sends a single user's ride entry to the Google Sheet.
+    The Google Apps Script handles figuring out which columns to put it in.
+    """
+    clean_category = content_category[0] if type(content_category).__name__ == 'Record' else content_category
+    clean_count = count[0] if type(count).__name__ == 'Record' else count
+    
+    payload = {
+        "action": _add,
+        "announcement_id": str(announcement_id),
+        "school": str(school), 
+        "role": str(role.lower().strip()),
+        "name": str(member.display_name),
+        "seats": str(seats) if seats else "",
+        "phone": str(phone),
+        "info": str(info) or "",
+        "content_category": str(clean_category),
+        "count": str(clean_count)
+    }
+
+    timeout = aiohttp.ClientTimeout(total=15)
+    
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        try:
+            async with session.post(GOOGLE_URL, json=payload, allow_redirects=True) as resp:
+                text = await resp.text()
+                
+                return text
+                    
+        except asyncio.TimeoutError:
+            print(f"⚠️ Sheets Sync timed out for {member.display_name}. Google took too long.")
+        except Exception as e:
+            print(f"⚠️ Unexpected Sheets Sync Error: {e}")
+            traceback.print_exc()
+
+async def remove_from_sheets(member, announcement_id, school, role, seats, phone, info, count, content_category):
+    clean_category = content_category[0] if type(content_category).__name__ == 'Record' else content_category
+    clean_count = count[0] if type(count).__name__ == 'Record' else count
+
+    payload = {
+        "action": _delete,
+        "announcement_id": str(announcement_id),
+        "school": str(school), 
+        "role": str(role).lower().strip(),  
+        "name": str(member.display_name),
+        "seats": str(seats) if seats else "",
+        "phone": str(phone),
+        "info": str(info or ""),
+        "count": str(clean_count),                
+        "content_category": str(clean_category) 
+    }
+
+    timeout = aiohttp.ClientTimeout(total=15)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        try:
+            async with session.post(GOOGLE_URL, json=payload, allow_redirects=True) as resp:
+                text = await resp.text()
+                
+                return text
+                    
+        except Exception as e:
+            return (f"⚠️ Sheets Delete Error: {e}")
+
+async def trigger_sheet_reset(announcement_id, content_category):
+    payload = {
+        "action": _reset,
+        "announcement_id": str(announcement_id),
+        "content_category": str(content_category)
+    }
+
+    timeout = aiohttp.ClientTimeout(total=15)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        try:
+            async with session.post(GOOGLE_URL, json=payload, allow_redirects=True) as resp:
+                text = await resp.text()
+                if resp.status == 200 and "Error" not in text:
+                    print(f"✅ Reset Successful: {text}")
+                else:
+                    print(f"❌ Reset Failed: {text}")
+        except Exception as e:
+            print(f"⚠️ Sheets Reset Error: {e}")
+        
 async def get_pasteable_text(bot, announcement_id) -> str:
     rows = await fetchall(
         "SELECT user_id, school, role, seats, phone, info FROM ride_entries WHERE announcement_id=$1",

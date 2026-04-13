@@ -1,7 +1,8 @@
+import asyncio
 import os
-from turtle import title
 import discord
 from db import execute, fetchone
+from exporter import remove_from_sheets, sync_to_sheets
 from time_utils import format_close_time, now
 from dashboard import refresh_dashboard_for_announcement
 from dotenv import load_dotenv
@@ -59,13 +60,39 @@ class AnnouncementContentModal(discord.ui.Modal, title="Announcement Content"):
         self.end_at = end_at_dt
         self.reactable = reactable
 
+        if self.reactable:
+            self.content_category = discord.ui.TextInput(
+                label="Ride Category",
+                style=discord.TextStyle.short,
+                placeholder="F for Friday PM or S for Sunday Service",
+                required=True,
+                max_length=1,
+            )
+            self.add_item(self.content_category)
+        else:
+            self.content_category = None
+
     async def on_submit(self, interaction: discord.Interaction):
+        category_value = None
+
+        if self.content_category:
+            raw_category = self.content_category.value.strip().upper()
+            
+            if raw_category not in ["F", "S"]:
+                await interaction.response.send_message(
+                    "❌ **Invalid Ride Category!** Please recreate the announcement and type exactly **F** (for Friday PM) or **S** (for Sunday Service).",
+                    ephemeral=True
+                )
+                return
+            
+            category_value = raw_category
+
         await execute(
             """
             INSERT INTO announcements (
-                id, title, send_at, end_at, content, reactable, state
+                id, title, send_at, end_at, content, content_category, reactable, state
             )
-            VALUES ($1, $2, $3, $4, $5, $6, 'scheduled')
+            VALUES ($1, $2, $3, $4, $5, $6, $7, 'scheduled')
             """,
             (
                 self.aid,
@@ -73,10 +100,10 @@ class AnnouncementContentModal(discord.ui.Modal, title="Announcement Content"):
                 self.send_at,
                 self.end_at,
                 self.content.value,
+                category_value,
                 self.reactable,
             )
         )
-
 
         await interaction.response.send_message(
             f"✅ Announcement created: `{self.aid}`",
@@ -98,23 +125,40 @@ class AnnouncementEditModal(discord.ui.Modal, title="Edit Announcement"):
         required=True,
     )
 
-    def __init__(self, announcement_id, old_title, old_content):
+    def __init__(self, announcement_id, old_title, old_content, old_content_category):
         super().__init__()
         self.announcement_id = announcement_id
         self.title_input.default = old_title
         self.content_input.default = old_content
 
+        if old_content_category is not None:
+            self.content_category = discord.ui.TextInput(
+                label="Ride Category",
+                style=discord.TextStyle.short,
+                placeholder="F for Friday PM or S for Sunday Service",
+                required=True,
+                max_length=1,
+                default=old_content_category
+            )
+            self.add_item(self.content_category)
+        else:
+            self.content_category = None
+
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
+
+        new_category = self.content_category.value if self.content_category else None
+
         await execute(
             """
             UPDATE announcements
-            SET title=$1, content=$2
-            WHERE id=$3
+            SET title=$1, content=$2, content_category=$3
+            WHERE id=$4
             """,
             (
                 self.title_input.value,
                 self.content_input.value,
+                new_category,
                 self.announcement_id,
             )
         )
@@ -155,7 +199,7 @@ class AnnouncementEditModal(discord.ui.Modal, title="Edit Announcement"):
                     )
 
                     end_at = None
-                    
+
                     if row:
                         end_at = row["end_at"]
 
@@ -188,150 +232,220 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
     phone = discord.ui.TextInput(label="Phone Number (e.g. 9999999999)", required=True)
     info = discord.ui.TextInput(label="Additional Information (Optional)", required=False)
 
-    def __init__(self, announcement_id):
+    def __init__(self, announcement_id, default_seats=None, default_number=None):
         super().__init__()
         self.announcement_id = announcement_id
+        if (default_seats):
+            self.seats.default = default_seats
+            self.phone.default = default_number
 
     async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        school = get_school(interaction.user)
+        # Instantly send the loading message
+        await interaction.response.send_message("⏳ Registering...", ephemeral=True)
+        
+        school = get_school(interaction.user).strip()
+        current_count = await fetchone(
+                "SELECT MAX(row_num) FROM ride_entries WHERE announcement_id=$1 AND role=$2 AND school=$3", 
+                (self.announcement_id, "driver", school)
+            )
+        
+        cat_record = await fetchone(
+            "SELECT content_category FROM announcements WHERE id=$1 AND reactable=$2",
+            (self.announcement_id, True)
+        )
+        content_category = cat_record[0] if cat_record else "F"
+
+        highest_row = int(current_count[0]) if current_count and current_count[0] is not None else 0
+        row_count = highest_row + 1
+
         try:
             if not str.isdigit(self.seats.value):
                 raise ValueError("seats")
-            
+
             seats = int(self.seats.value)
             if seats <= 0:
                 raise ValueError("seats")
-            
+
             phone = self.phone.value
             if not str.isdigit(self.phone.value) or len(self.phone.value) != 10:
                 raise ValueError("phone")
-            
+
             info = self.info.value
             if len(self.info.value) > 130:
                 raise ValueError("info")
-            
+
         except ValueError as e:
+            # Edit ephemeral response if validation fails
             if str(e) == "seats":
-                await interaction.followup.send(
-                    "❌ Please enter a valid positive number of seats.",
-                    ephemeral=True
-                )
+                await interaction.edit_original_response(content="❌ Please enter a valid positive number of seats.")
             if str(e) == "phone":
-                await interaction.followup.send(
-                    "❌ Please enter a valid phone number (e.g 999-999-9999 without dashes).",
-                    ephemeral=True
-                )
+                await interaction.edit_original_response(content="❌ Please enter a valid phone number (e.g 9999999999 without dashes).")
             if str(e) == "info":
-                await interaction.followup.send(
-                    "❌ Additional information is limited to 130 characters.",
-                    ephemeral=True
-                )
+                await interaction.edit_original_response(content="❌ Additional information is limited to 130 characters.")
             return
 
         await execute(
             """
             INSERT INTO ride_entries (
-                announcement_id,
+                announcement_id, user_id, school, role, seats, updated_at, phone, info, row_num
+            )
+            VALUES ($1, $2, $3, 'driver', $4, $5, $6, $7, $8)
+            """,
+            (self.announcement_id, interaction.user.id, school, seats, now(), phone, info, row_count)
+        )
+
+        # Sync to Google Sheets and wait for response
+        google_receipt = await sync_to_sheets(
+                member=interaction.user,
+                announcement_id=self.announcement_id,
+                school=school,
+                role="driver",
+                seats=seats,
+                phone=phone,
+                info=info,
+                count=row_count,
+                content_category=content_category
+            )
+        
+        if google_receipt is None:
+            google_receipt = "Error: No response received from Google."
+
+        if "Error" in google_receipt or "⚠️" in google_receipt:
+            await interaction.edit_original_response(
+                content=f"❌ **Google Sheets Error:**\n`{google_receipt}`\n*Please try again or contact an admin.*"
+            )
+            return
+        
+        # Stores information
+        await execute(
+            """
+            INSERT INTO saved_info (
                 user_id,
-                school,
                 role,
                 seats,
-                updated_at,
-                phone,
-                info
+                phone
             )
-            VALUES ($1, $2, $3, 'driver', $4, $5, $6, $7)
+            VALUES ($1, 'driver', $2, $3)
+            ON CONFLICT (user_id)
+            DO UPDATE SET
+                role = 'driver',
+                seats = EXCLUDED.seats,
+                phone = EXCLUDED.phone
             """,
             (
-                self.announcement_id,
                 interaction.user.id,
-                school,
                 seats,
-                now(),
-                phone,
-                info,
+                phone
             )
         )
+        await interaction.edit_original_response(content="✅ You are now registered as a driver.")
 
-        await interaction.followup.send(
-            "✅ You are now registered as a driver.",
-            ephemeral=True
-        )
-
-        await refresh_dashboard_for_announcement(
-            interaction.client,
-            self.announcement_id
-        )
+        await refresh_dashboard_for_announcement(interaction.client, self.announcement_id)
 
 class RiderModal(discord.ui.Modal, title = "Rider Info"):
     phone = discord.ui.TextInput(label="Phone Number (e.g. 9999999999)", required=True)
     info = discord.ui.TextInput(label="Additional Information (Optional)", required=False)
-
-    def __init__(self, announcement_id):
+    # Have a "save info" button
+    def __init__(self, announcement_id, default_number):
         super().__init__()
         self.announcement_id = announcement_id
+        if (default_number):
+            self.phone.default = default_number
 
     async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        school = get_school(interaction.user)
+        # Instantly send the loading message
+        await interaction.response.send_message("⏳ Registering...", ephemeral=True)
+        
+        school = get_school(interaction.user).strip()
+        current_count = await fetchone(
+                "SELECT MAX(row_num) FROM ride_entries WHERE announcement_id=$1 AND role=$2 AND school=$3", 
+                (self.announcement_id, "rider", school)
+            )
+        
+        cat_record = await fetchone(
+            "SELECT content_category FROM announcements WHERE id=$1 AND reactable=$2",
+            (self.announcement_id, True)
+        )
+        content_category = cat_record[0] if cat_record else "F"
+
+        highest_row = int(current_count[0]) if current_count and current_count[0] is not None else 0
+        row_count = highest_row + 1
+
         try:
-            
+
             phone = self.phone.value
             if not str.isdigit(self.phone.value) or len(self.phone.value) != 10:
                 raise ValueError("phone")
-            
+
             info = self.info.value
             if len(self.info.value) > 130:
                 raise ValueError("info")
             
-        except ValueError as e:
+        # Edit ephemeral message if validation fails
 
+        except ValueError as e:
             if str(e) == "phone":
-                await interaction.followup.send(
-                    "❌ Please enter a valid phone number (e.g 999-999-9999 without dashes).",
-                    ephemeral=True
-                )
+                await interaction.edit_original_response(content="❌ Please enter a valid phone number (e.g 9999999999 without dashes).")
             if str(e) == "info":
-                await interaction.followup.send(
-                    "❌ Additional information is limited to 130 characters.",
-                    ephemeral=True
-                )
+                await interaction.edit_original_response(content="❌ Additional information is limited to 130 characters.")
             return
 
         await execute(
             """
             INSERT INTO ride_entries (
-                announcement_id,
+                announcement_id, user_id, school, role, seats, updated_at, phone, info, row_num
+            )
+            VALUES ($1, $2, $3, 'rider', NULL, $4, $5, $6, $7)
+            """,
+            (self.announcement_id, interaction.user.id, school, now(), phone, info, row_count)
+        )
+        
+        # Sync to Google Sheets and wait for response
+        google_receipt =await sync_to_sheets(
+                member=interaction.user,
+                announcement_id=self.announcement_id,
+                school=school,
+                role="rider",
+                seats=None,
+                phone=phone,
+                info=info,
+                count=row_count,
+                content_category=content_category
+            )
+        
+        if google_receipt is None:
+            google_receipt = "Error: No response received from Google."
+
+        if "Error" in google_receipt or "⚠️" in google_receipt:
+            await interaction.edit_original_response(
+                content=f"❌ **Google Sheets Error:**\n`{google_receipt}`\n*Please try again or contact an admin.*"
+            )
+            return
+
+        await execute(
+            """
+            INSERT INTO saved_info (
                 user_id,
-                school,
                 role,
                 seats,
-                updated_at,
-                phone,
-                info
+                phone
             )
-            VALUES ($1, $2, $3, 'rider', NULL, $4, $5, $6)
+            VALUES ($1, 'rider', NULL, $2)
+            ON CONFLICT (user_id)
+            DO UPDATE SET
+                role = 'rider',
+                phone = EXCLUDED.phone
             """,
             (
-                self.announcement_id,
                 interaction.user.id,
-                school,
-                now(),
-                phone,
-                info,
+                phone
             )
         )
 
-        await interaction.followup.send(
-            "✅ You are now registered as a rider.",
-            ephemeral=True
-        )
+        await interaction.edit_original_response(content="✅ You are now registered as a rider.")
 
-        await refresh_dashboard_for_announcement(
-            interaction.client,
-            self.announcement_id
-        )
+        await refresh_dashboard_for_announcement(interaction.client, self.announcement_id)
+        
 # ─────────────────────────────────────────────────────────────
 # Ride View (Public Buttons)
 # ─────────────────────────────────────────────────────────────
@@ -386,8 +500,22 @@ class RideView(discord.ui.View):
             )
             return
 
+        saved = await fetchone(
+        """
+        SELECT phone
+        FROM saved_info
+        WHERE user_id=$1
+        """,
+        (interaction.user.id,)
+        )
+
+        default_number = None
+
+        if saved:
+            default_number = saved["phone"]
+
         await interaction.response.send_modal(
-            RiderModal(self.announcement_id)
+            RiderModal(self.announcement_id, default_number)
         )
 
     async def driver_callback(self, interaction: discord.Interaction):
@@ -408,34 +536,80 @@ class RideView(discord.ui.View):
             )
             return
 
+        saved = await fetchone(
+        """
+        SELECT seats, phone
+        FROM saved_info
+        WHERE user_id=$1
+        """,
+        (interaction.user.id,)
+        )
+
+        default_seats = None
+        default_number = None
+
+        if saved:
+            default_seats = saved["seats"]
+            default_number = saved["phone"]
+
         await interaction.response.send_modal(
-            DriverModal(self.announcement_id)
+            DriverModal(self.announcement_id, default_seats, default_number)
         )
 
     async def withdraw_callback(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        reg = await is_registered(self.announcement_id, interaction.user.id)
-        if not reg:
-            await interaction.followup.send(
-                "ℹ️ You are not registered for this announcement.",
-                ephemeral=True
-            )
+        # Immediate loading state in ephemeral message
+        await interaction.response.send_message("⏳ Withdrawing...", ephemeral=True)
+        
+        entry = await fetchone(
+            "SELECT school, role, seats, phone, info, row_num FROM ride_entries WHERE user_id=$1 AND announcement_id=$2",
+            (interaction.user.id, self.announcement_id)
+        )
+
+        if not entry:
+            await interaction.edit_original_response(content="ℹ️ You are not registered for this announcement.")
             return
 
-        await execute(
-            """
-            DELETE FROM ride_entries
-            WHERE announcement_id=$1 AND user_id=$2
-            """,
-            (self.announcement_id, interaction.user.id)
-        )
+        school, role, seats, phone, info, user_count = entry
 
-        await interaction.followup.send(
-            "❌ You have withdrawn.",
-            ephemeral=True
+        cat_record = await fetchone(
+            "SELECT content_category FROM announcements WHERE id=$1",
+            (self.announcement_id,)
         )
+        content_category = cat_record[0] if cat_record else "F"
 
-        await refresh_dashboard_for_announcement(
-            interaction.client,
-            self.announcement_id
-        )
+        try:
+            # Wait for Google Sheets response before confirming withdrawal to user
+            google_receipt = await remove_from_sheets(
+                interaction.user, 
+                self.announcement_id, 
+                school, 
+                role, 
+                seats, 
+                phone, 
+                info, 
+                user_count, 
+                content_category
+            )
+
+            await execute(
+                "DELETE FROM ride_entries WHERE announcement_id=$1 AND user_id=$2",
+                (self.announcement_id, interaction.user.id)
+            )
+
+            if google_receipt is None:
+                google_receipt = "Error: No response received from Google."
+
+            if "Error" in google_receipt or "⚠️" in google_receipt:
+                await interaction.edit_original_response(
+                    content=f"❌ **Google Sheets Error:**\n`{google_receipt}`\n*Your withdrawal was processed locally but failed to sync with Google Sheets. Please contact an admin to resolve this.*"
+                )
+                return
+
+            # Edit ephemeral response to confirm successful withdrawal
+            await interaction.edit_original_response(content="✅ You have successfully withdrawn and been removed from the ride list.")
+
+            await refresh_dashboard_for_announcement(interaction.client, self.announcement_id)
+
+        except Exception as e:
+            print(f"Error during withdrawal: {e}")
+            await interaction.edit_original_response(content="⚠️ Something went wrong while withdrawing. Please try again.")

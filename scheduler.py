@@ -3,6 +3,7 @@ import asyncio
 from db import fetchall, execute, fetchone
 from time_utils import now, get_cutoff_datetime, format_close_time
 from views import RideView
+from exporter import trigger_sheet_reset
 from dashboard import render_dashboard, refresh_dashboard_for_announcement
 from dashboard_paginator import DashboardPaginator
 from dotenv import load_dotenv
@@ -42,7 +43,7 @@ async def scheduler_loop(bot):
 async def send_scheduled_announcements(bot) -> list:
     rows = await fetchall(
         """
-        SELECT id, title, content, reactable, end_at
+        SELECT id, title, content, reactable, end_at, content_category
         FROM announcements
         WHERE state='scheduled'
           AND send_at <= $1
@@ -68,7 +69,7 @@ async def send_scheduled_announcements(bot) -> list:
             admin_ch = None
 
     sent_announcement_ids = []
-    for announcement_id, title, content, reactable, end_at in rows:
+    for announcement_id, title, content, reactable, end_at, content_category in rows:
         view = RideView(announcement_id, False) if reactable else None
 
         if reactable:
@@ -90,6 +91,8 @@ async def send_scheduled_announcements(bot) -> list:
                 admin_ch=admin_ch,
             )
 
+            await trigger_sheet_reset(announcement_id, content_category)
+            
         await execute(
             """
             UPDATE announcements

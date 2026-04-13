@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS announcements (
 
     title TEXT NOT NULL,
     content TEXT NOT NULL,
+    content_category TEXT,
 
     -- UTC timestamps, timezone-aware
     send_at TIMESTAMPTZ NOT NULL,
@@ -45,6 +46,7 @@ CREATE TABLE IF NOT EXISTS ride_entries (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     phone TEXT NOT NULL,
     info TEXT,
+    row_num INTEGER NOT NULL DEFAULT 1,
 
     PRIMARY KEY (announcement_id, user_id)
 );
@@ -60,3 +62,20 @@ CREATE INDEX IF NOT EXISTS idx_announcements_end_at
 
 CREATE INDEX IF NOT EXISTS idx_ride_entries_announcement
     ON ride_entries (announcement_id);
+
+-- ─────────────────────────────────────────────────────────────
+-- Saved Information
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS saved_info (
+    -- Discord user ID (snowflake)
+    user_id BIGINT NOT NULL,
+
+    role TEXT NOT NULL,
+
+    -- Only meaningful for drivers
+    seats INTEGER CHECK (seats >= 0),
+
+    phone TEXT NOT NULL,
+
+    PRIMARY KEY (user_id)
+);

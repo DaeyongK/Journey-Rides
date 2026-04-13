@@ -20,30 +20,35 @@ intents = discord.Intents.default()
 intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
+bot.setup = False
 
 @bot.event
 async def on_ready():
-    await init_db()
+    if not bot.setup:
+        await init_db()
 
-    # Restoring views for sent and closed announcements for persistence
-    rows = await fetchall(
-        "SELECT id, state, title, end_at, dashboard_page, reactable FROM announcements WHERE state IN ('sent', 'closed')"
-    )
+        # Restoring views for sent and closed announcements for persistence
+        rows = await fetchall(
+            "SELECT id, state, title, end_at, dashboard_page, reactable FROM announcements WHERE state IN ('sent', 'closed')"
+        )
 
-    for aid, state, title, end_at, page, reactable in rows:
-        if reactable:
-            bot.add_view(RideView(aid, is_closed=(state == "closed")))
-            embeds = await render_dashboard(bot, aid, title, end_at)
-            if embeds:
-                bot.add_view(DashboardPaginator(embeds, aid, title, start_index=page))
+        for aid, state, title, end_at, page, reactable in rows:
+            if reactable:
+                bot.add_view(RideView(aid, is_closed=(state == "closed")))
+                embeds = await render_dashboard(bot, aid, title, end_at)
+                if embeds:
+                    bot.add_view(DashboardPaginator(embeds, aid, title, start_index=page))
 
-    # Sync commands
-    guild = discord.Object(id=int(os.getenv("SERVER_ID")))
-    bot.tree.copy_global_to(guild=guild)
-    await bot.tree.sync(guild=guild)
-    
-    # Start scheduler loop
-    bot.loop.create_task(scheduler_loop(bot))
+        # Sync commands
+        guild = discord.Object(id=int(os.getenv("SERVER_ID")))
+        bot.tree.copy_global_to(guild=guild)
+        await bot.tree.sync(guild=guild)
+        
+        # Start scheduler loop
+        bot.loop.create_task(scheduler_loop(bot))
+        bot.setup = True
+    else:
+        print("Bot is already set up and ready.")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -117,7 +122,7 @@ async def announcement_edit(
         return
     row = await fetchone(
         """
-        SELECT title, content, state
+        SELECT title, content, state, content_category
         FROM announcements
         WHERE id=$1
         """,
@@ -131,7 +136,7 @@ async def announcement_edit(
         )
         return
 
-    title, content, state = row
+    title, content, state, content_category = row
 
     if state == "scheduled":
         await interaction.response.send_message(
@@ -145,6 +150,7 @@ async def announcement_edit(
             announcement_id=announcement_id,
             old_title=title,
             old_content=content,
+            old_content_category=content_category
         )
     )
 
@@ -243,16 +249,9 @@ async def announcement_unschedule(
 async def announcement_view(interaction: discord.Interaction):
     rows = await fetchall(
         """
-        SELECT id, title, send_at, end_at, state, content
+        SELECT id, title, send_at, end_at, state, content, content_category, reactable
         FROM announcements
-        ORDER BY
-        CASE state
-            WHEN 'scheduled' THEN 1
-            WHEN 'sent' THEN 2
-            WHEN 'closed' THEN 3
-            ELSE 4
-        END,
-        send_at ASC
+        ORDER BY end_at DESC NULLS LAST
         """
     )
 
@@ -267,25 +266,19 @@ async def announcement_view(interaction: discord.Interaction):
         description="Showing all stored announcements and their content."
     )
 
-    for aid, title, send_at, end_at, state, content in rows:
-        # 1. Handle Field Limits (Discord limit is 25 per embed)
-        # We use a lower limit (e.g., 8-10) because content previews make the embed very tall
+    for aid, title, send_at, end_at, state, *_ in rows:
+        # Handle Field Limits (Discord limit is 25 per embed)
         if len(current_embed.fields) >= 6: 
             embeds.append(current_embed)
             current_embed = discord.Embed(color=discord.Color.blue())
 
-        # 2. Format Timestamp
+        # Format Timestamp
         send_at_display = fmt_time(send_at)
         end_at_display = fmt_time(end_at) if end_at else "—"
-
-
-        # 3. Format Content Preview
-        # Truncate content to 200 chars to avoid hitting embed character limits
-        preview = content if len(content) <= 200 else content[:197] + "..."
         
         status_emoji = {"scheduled": "⏳", "sent": "✅", "closed": "🔒"}.get(state, "❓")
         
-        # 4. Add Field
+        # Add Field
         embed_value = (
             f"**ID:** `{aid}`\n"
             f"**Status:** {state.capitalize()}\n"
@@ -301,9 +294,7 @@ async def announcement_view(interaction: discord.Interaction):
 
     embeds.append(current_embed)
 
-    # Note: Discord supports up to 10 embeds per message.
-    # We slice to 10 to prevent crashes in case DB is very large.
-    await interaction.response.send_message(embeds=embeds[:10], ephemeral=True)
+    await interaction.response.send_message(embeds=embeds[:1], ephemeral=True)
 
 
 bot.run(os.getenv("DISCORD_TOKEN"))
