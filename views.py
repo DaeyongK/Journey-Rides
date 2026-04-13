@@ -360,7 +360,7 @@ class RiderModal(discord.ui.Modal, title = "Rider Info"):
             VALUES ($1, 'rider', NULL, $2)
             ON CONFLICT (user_id)
             DO UPDATE SET
-                role = 'rider,
+                role = 'rider',
                 phone = EXCLUDED.phone
             """,
             (
