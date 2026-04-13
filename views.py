@@ -318,23 +318,26 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
         
         # Stores information
         await execute(
-        """
-        INSERT INTO saved_info (
-            user_id,
-            role,
-            seats,
-            phone
+            """
+            INSERT INTO saved_info (
+                user_id,
+                role,
+                seats,
+                phone
+            )
+            VALUES ($1, 'driver', $2, $3)
+            ON CONFLICT (user_id)
+            DO UPDATE SET
+                role = 'driver',
+                seats = EXCLUDED.seats,
+                phone = EXCLUDED.phone
+            """,
+            (
+                interaction.user.id,
+                seats,
+                phone
+            )
         )
-        VALUES ($1, 'driver', $2, $3)
-        """,
-        (
-            interaction.user.id,
-            seats,
-            phone,
-        )
-        )
-
-        # Edit the ephemeral message to Success!
         await interaction.edit_original_response(content="✅ You are now registered as a driver.")
 
         await refresh_dashboard_for_announcement(interaction.client, self.announcement_id)
@@ -419,21 +422,24 @@ class RiderModal(discord.ui.Modal, title = "Rider Info"):
             )
             return
 
-        # Stores information
         await execute(
-        """
-        INSERT INTO saved_info (
-            user_id,
-            role,
-            seats,
-            phone
-        )
-        VALUES ($1, 'rider', NULL, $2)
-        """,
-        (
-            interaction.user.id,
-            phone,
-        )
+            """
+            INSERT INTO saved_info (
+                user_id,
+                role,
+                seats,
+                phone
+            )
+            VALUES ($1, 'rider', NULL, $2)
+            ON CONFLICT (user_id)
+            DO UPDATE SET
+                role = 'rider',
+                phone = EXCLUDED.phone
+            """,
+            (
+                interaction.user.id,
+                phone
+            )
         )
 
         await interaction.edit_original_response(content="✅ You are now registered as a rider.")
