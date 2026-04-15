@@ -235,7 +235,7 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
     def __init__(self, announcement_id, default_seats=None, default_number=None):
         super().__init__()
         self.announcement_id = announcement_id
-        if (default_seats):
+        if (default_seats or default_number):
             self.seats.default = default_seats
             self.phone.default = default_number
 
@@ -438,7 +438,8 @@ class RiderModal(discord.ui.Modal, title = "Rider Info"):
             ON CONFLICT (user_id)
             DO UPDATE SET
                 role = 'rider',
-                phone = EXCLUDED.phone
+                seats = COALESCE(EXCLUDED.seats, saved_info.seats),
+                phone = COALESCE(EXCLUDED.phone, saved_info.phone)
             """,
             (
                 interaction.user.id,
