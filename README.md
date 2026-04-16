@@ -182,66 +182,6 @@ The bot will now appear in the server (offline until running).
 - Use environment variables for all secrets
 - Grant only the permissions the bot actually needs
 
-
-## 🚀 Getting Started
-
-### 1️⃣ Clone the Repository
-
-```bash
-git clone <your-repo-url>
-cd journey-rides
-``` 
-
-### 2️⃣ Create a Virtual Environment
-```bash
-python3 -m venv venv
-source venv/bin/activate
-```
-
-### 3️⃣ Install Dependencies
-```bash
-pip install -r requirements.txt
-```
-
-### 4️⃣ Configure Environment Variables
-
-Create a .env file in the project root (real values are shared privately):
-
-```bash
-DISCORD_TOKEN=your_bot_token_here
-
-DATABASE_URL=postgresql://journey:journey@localhost:5432/journey
-
-SERVER_ID=123456789012345678
-PUBLIC_CHANNEL_ID=123456789012345678
-ADMIN_CHANNEL_ID=123456789012345678
-
-ALLOWED_ROLE_ID=123456789012345678
-GT_ROLE_ID=123456789012345678
-EMORY_ROLE_ID=123456789012345678
-GSU_ROLE_ID=123456789012345678
-```
-
-### 5️⃣ Run the Bot
-
-```bash
-python bot.py
-```
-
-On first startup:
-
-- A PostgreSQL connection pool is created
-
-- Database tables are initialized automatically from schema.sql
-
-You should see:
-
-```bash
-[scheduler] started
-```
-
-Your slash commands will sync automatically.
-
 ## 📊 Google Sheets Setup (Apps Script Web App)
 
 This project uses a **Google Apps Script Web App** to automatically export the rides data into a Google Sheet. Contact **Joshua Yi** (@jshuao on Discord) if there are any issues with the Google Apps Script on deployment.
@@ -322,6 +262,65 @@ Add it to your `.env` file just like your Discord token:
 - **Never share your Web App URL publicly.** Anyone with this link can send HTTP POST requests to add or delete rows in your spreadsheet.
 - Do not delete the Google Account that created the script, or the Web App will go offline.
 - If you ever need to update the Javascript code in the future, you **must** deploy it as a New Version (Deploy → Manage Deployments → Edit ✏️ → New version → Deploy).
+
+## 🚀 Getting Started
+
+### 1️⃣ Clone the Repository
+
+```bash
+git clone <your-repo-url>
+cd journey-rides
+``` 
+
+### 2️⃣ Create a Virtual Environment
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+### 3️⃣ Install Dependencies
+```bash
+pip install -r requirements.txt
+```
+
+### 4️⃣ Configure Environment Variables
+
+Create a .env file in the project root (real values are shared privately):
+
+```bash
+DISCORD_TOKEN=your_bot_token_here
+
+DATABASE_URL=postgresql://journey:journey@localhost:5432/journey
+
+SERVER_ID=123456789012345678
+PUBLIC_CHANNEL_ID=123456789012345678
+ADMIN_CHANNEL_ID=123456789012345678
+
+ALLOWED_ROLE_ID=123456789012345678
+GT_ROLE_ID=123456789012345678
+EMORY_ROLE_ID=123456789012345678
+GSU_ROLE_ID=123456789012345678
+```
+
+### 5️⃣ Run the Bot
+
+```bash
+python bot.py
+```
+
+On first startup:
+
+- A PostgreSQL connection pool is created
+
+- Database tables are initialized automatically from schema.sql
+
+You should see:
+
+```bash
+[scheduler] started
+```
+
+Your slash commands will sync automatically.
 
 ## 🧭 Slash Commands Overview
 
