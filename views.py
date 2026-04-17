@@ -611,8 +611,30 @@ class RideView(discord.ui.View):
 
             # Edit ephemeral response to confirm successful withdrawal
             await interaction.edit_original_response(content="✅ You have successfully withdrawn and been removed from the ride list.")
-
             await refresh_dashboard_for_announcement(interaction.client, self.announcement_id)
+
+            WITHDRAW_CHANNEL_ID = int(os.getenv("WITHDRAW_CHANNEL_ID"))
+            withdraw_channel = interaction.client.get_channel(WITHDRAW_CHANNEL_ID)
+
+            if withdraw_channel is None:
+                try:
+                    withdraw_channel = await interaction.client.fetch_channel(WITHDRAW_CHANNEL_ID)
+                except Exception:
+                    print("Withdraw channel error.")
+
+            if content_category == "F":
+                ride_type = "Friday PM"
+            elif content_category == "S":
+                ride_type = "Sunday Service"
+
+            if withdraw_channel and role == "driver":
+                await withdraw_channel.send(
+                    f"{role[:1].upper() + role[1:]} {interaction.user.display_name} from {school} withdrew from {ride_type} rides with {seats} seats."
+                )
+            elif withdraw_channel and role == "rider":
+                await withdraw_channel.send(
+                    f"{role[:1].upper() + role[1:]} {interaction.user.display_name} from {school} withdrew from {ride_type} rides."
+                )
 
         except Exception as e:
             print(f"Error during withdrawal: {e}")
