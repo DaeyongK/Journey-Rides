@@ -6,6 +6,7 @@ from views import RideView
 from exporter import trigger_sheet_reset
 from dashboard import render_dashboard, refresh_dashboard_for_announcement
 from dashboard_paginator import DashboardPaginator
+import availability
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -43,7 +44,7 @@ async def scheduler_loop(bot):
 async def send_scheduled_announcements(bot) -> list:
     rows = await fetchall(
         """
-        SELECT id, title, content, reactable, end_at, content_category
+        SELECT id, title, content, reactable, end_at, content_category, ride_date
         FROM announcements
         WHERE state='scheduled'
           AND send_at <= $1
@@ -69,7 +70,7 @@ async def send_scheduled_announcements(bot) -> list:
             admin_ch = None
 
     sent_announcement_ids = []
-    for announcement_id, title, content, reactable, end_at, content_category in rows:
+    for announcement_id, title, content, reactable, end_at, content_category, ride_date in rows:
         view = RideView(announcement_id, False) if reactable else None
 
         if reactable:
@@ -92,7 +93,7 @@ async def send_scheduled_announcements(bot) -> list:
             )
 
             await trigger_sheet_reset(announcement_id, content_category)
-            
+
         await execute(
             """
             UPDATE announcements
@@ -104,6 +105,16 @@ async def send_scheduled_announcements(bot) -> list:
             """,
             (msg.id, dashboard_msg_id, announcement_id)
         )
+
+        # Pipe assigned drivers from the availability schedule into this ride's signups
+        if reactable and ride_date:
+            try:
+                await availability.prefill_announcement_drivers(
+                    bot, announcement_id, ride_date, content_category
+                )
+            except Exception as e:
+                print(f"[scheduler] driver prefill error: {e}")
+
         sent_announcement_ids.append(announcement_id)
     return sent_announcement_ids
 
@@ -142,7 +153,7 @@ async def create_dashboard(bot, announcement_id, title, end_at, admin_ch):
 async def close_expired_announcements(bot) -> list:
     rows = await fetchall(
         """
-        SELECT id, message_id, reactable
+        SELECT id, message_id, reactable, ride_date, content_category
         FROM announcements
         WHERE state='sent'
           AND end_at IS NOT NULL
@@ -163,7 +174,7 @@ async def close_expired_announcements(bot) -> list:
 
     closed_announcement_ids = []
 
-    for announcement_id, message_id, reactable in rows:
+    for announcement_id, message_id, reactable, ride_date, content_category in rows:
         await execute(
             "UPDATE announcements SET state='closed' WHERE id=$1",
             (announcement_id,)
@@ -190,6 +201,14 @@ async def close_expired_announcements(bot) -> list:
             except Exception:
                 pass
 
+        # If a ride's signups closed short on driver seats, call for more drivers
+        if reactable and ride_date:
+            try:
+                await availability.request_drivers_if_short(
+                    bot, announcement_id, ride_date, content_category
+                )
+            except Exception as e:
+                print(f"[scheduler] driver shortfall check error: {e}")
 
         closed_announcement_ids.append(announcement_id)
 

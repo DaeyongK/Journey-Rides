@@ -26,6 +26,13 @@ async def execute(query, params=()):
         await conn.execute(query, *params)
 
 
+async def executemany(query, args_list):
+    if not args_list:
+        return
+    async with _pool.acquire() as conn:
+        await conn.executemany(query, args_list)
+
+
 async def fetchone(query, params=()):
     async with _pool.acquire() as conn:
         return await conn.fetchrow(query, *params)
