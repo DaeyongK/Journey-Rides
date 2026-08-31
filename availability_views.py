@@ -157,7 +157,12 @@ class AvailabilityView(discord.ui.View):
         if not await self._guard(interaction):
             return
         await replace_entries(self.poll_id, interaction.user.id, self.school, [])
-        await interaction.response.send_message(
+        # Re-render the message so the dropdown drops the caller's highlighted
+        # options (Discord keeps a select's shown selection per-user until the
+        # component is re-sent). The view carries no default options, so this
+        # resets it to "nothing selected".
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send(
             "🗑 Cleared your availability for this month.", ephemeral=True
         )
         await availability.refresh_admin_availability_message(
