@@ -3,7 +3,7 @@ import os
 import discord
 from db import execute, fetchone
 from exporter import remove_from_sheets, sync_to_sheets
-from time_utils import format_close_time, now
+from time_utils import format_close_time, now, ride_type_for_date, ride_type_label
 from dashboard import refresh_dashboard_for_announcement
 from dotenv import load_dotenv
 load_dotenv()
@@ -51,7 +51,7 @@ class AnnouncementContentModal(discord.ui.Modal, title="Announcement Content"):
         max_length=4000,
     )
 
-    def __init__(self, interaction, aid, title, send_at_dt, end_at_dt, reactable):
+    def __init__(self, interaction, aid, title, send_at_dt, end_at_dt, reactable, ride_date=None):
         super().__init__()
         self.interaction = interaction
         self.aid = aid
@@ -59,6 +59,7 @@ class AnnouncementContentModal(discord.ui.Modal, title="Announcement Content"):
         self.send_at = send_at_dt
         self.end_at = end_at_dt
         self.reactable = reactable
+        self.ride_date = ride_date
 
         if self.reactable:
             self.content_category = discord.ui.TextInput(
@@ -87,12 +88,26 @@ class AnnouncementContentModal(discord.ui.Modal, title="Announcement Content"):
             
             category_value = raw_category
 
+        # The ride date must be the same kind of ride as the category entered above
+        if self.ride_date and category_value:
+            expected = ride_type_for_date(self.ride_date)
+            if expected and expected != category_value:
+                await interaction.response.send_message(
+                    f"❌ **Ride date / category mismatch.** `{self.ride_date}` is a "
+                    f"{self.ride_date.strftime('%A')} "
+                    f"(**{ride_type_label(expected)}**), but you entered "
+                    f"**{ride_type_label(category_value)}**. "
+                    "Please run `/announcement_create` again with matching values.",
+                    ephemeral=True,
+                )
+                return
+
         await execute(
             """
             INSERT INTO announcements (
-                id, title, send_at, end_at, content, content_category, reactable, state
+                id, title, send_at, end_at, content, content_category, reactable, state, ride_date
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, 'scheduled')
+            VALUES ($1, $2, $3, $4, $5, $6, $7, 'scheduled', $8)
             """,
             (
                 self.aid,
@@ -102,11 +117,19 @@ class AnnouncementContentModal(discord.ui.Modal, title="Announcement Content"):
                 self.content.value,
                 category_value,
                 self.reactable,
+                self.ride_date,
             )
         )
 
+        pipeline_note = ""
+        if self.reactable and self.ride_date:
+            pipeline_note = (
+                f"\n🔗 Drivers assigned for **{self.ride_date}** will be "
+                "auto-registered when this announcement sends."
+            )
+
         await interaction.response.send_message(
-            f"✅ Announcement created: `{self.aid}`",
+            f"✅ Announcement created: `{self.aid}`{pipeline_note}",
             ephemeral=True
         )
 
@@ -232,12 +255,14 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
     phone = discord.ui.TextInput(label="Phone Number (e.g. 9999999999)", required=True)
     info = discord.ui.TextInput(label="Additional Information (Optional)", required=False)
 
-    def __init__(self, announcement_id, default_seats=None, default_number=None):
+    def __init__(self, announcement_id, default_seats=None, default_number=None, default_info=None):
         super().__init__()
         self.announcement_id = announcement_id
         if (default_seats or default_number):
             self.seats.default = default_seats
             self.phone.default = default_number
+        if default_info:
+            self.info.default = default_info
 
     async def on_submit(self, interaction: discord.Interaction):
         # Instantly send the loading message
@@ -277,23 +302,34 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
                 await interaction.edit_original_response(content="❌ Additional information is limited to 130 characters.")
             return
 
+        # Upsert: a driver may already have a row if they were auto-registered
+        # from the availability schedule — in that case keep their row_num and
+        # just fill in the details they're now submitting.
         row = await fetchone(
             """
             INSERT INTO ride_entries (
-                announcement_id, user_id, school, role, seats, updated_at, phone, info, row_num
+                announcement_id, user_id, school, role, seats, updated_at, phone, info, row_num, auto_assigned
             )
             SELECT
                 $1, $2, $3, 'driver', $4, NOW(), $5, $6,
-                COALESCE(MAX(row_num), 0) + 1
+                COALESCE(MAX(row_num), 0) + 1, FALSE
             FROM ride_entries
             WHERE announcement_id = $1
               AND role = 'driver'
               AND school = $3
+            ON CONFLICT (announcement_id, user_id) DO UPDATE SET
+                school = EXCLUDED.school,
+                role = 'driver',
+                seats = EXCLUDED.seats,
+                phone = EXCLUDED.phone,
+                info = EXCLUDED.info,
+                updated_at = NOW(),
+                auto_assigned = FALSE
             RETURNING row_num
             """,
             (self.announcement_id, interaction.user.id, school, seats, phone, info)
         )
-        
+
         row_count = row["row_num"]
 
         # Sync to Google Sheets and wait for response
@@ -340,7 +376,7 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
                 phone
             )
         )
-        await interaction.edit_original_response(content="✅ You are now registered as a driver.")
+        await interaction.edit_original_response(content="✅ You're registered to drive — seats and info saved.")
 
         await refresh_dashboard_for_announcement(interaction.client, self.announcement_id)
 
@@ -533,32 +569,44 @@ class RideView(discord.ui.View):
             )
             return
 
-        reg = await is_registered(self.announcement_id, interaction.user.id)
-        if reg:
+        existing = await fetchone(
+            """
+            SELECT role, seats, phone, info
+            FROM ride_entries
+            WHERE announcement_id=$1 AND user_id=$2
+            """,
+            (self.announcement_id, interaction.user.id)
+        )
+
+        # A rider must withdraw before switching. An existing driver — whether
+        # they signed up or were assigned from the availability schedule — can
+        # re-open this any time to update their seats / phone / notes.
+        if existing and existing["role"] != "driver":
             await interaction.response.send_message(
-                "⚠️ You are already registered. Please withdraw before switching roles.",
+                "⚠️ You're registered as a rider. Please withdraw before registering as a driver.",
                 ephemeral=True
             )
             return
 
-        saved = await fetchone(
-        """
-        SELECT seats, phone
-        FROM saved_info
-        WHERE user_id=$1
-        """,
-        (interaction.user.id,)
-        )
-
         default_seats = None
         default_number = None
+        default_info = None
 
-        if saved:
-            default_seats = saved["seats"]
-            default_number = saved["phone"]
+        if existing:  # already a driver on this ride — prefill their current entry
+            default_seats = existing["seats"] or None
+            default_number = existing["phone"] or None
+            default_info = existing["info"] or None
+        else:
+            saved = await fetchone(
+                "SELECT seats, phone FROM saved_info WHERE user_id=$1",
+                (interaction.user.id,)
+            )
+            if saved:
+                default_seats = saved["seats"]
+                default_number = saved["phone"]
 
         await interaction.response.send_modal(
-            DriverModal(self.announcement_id, default_seats, default_number)
+            DriverModal(self.announcement_id, default_seats, default_number, default_info)
         )
 
     async def withdraw_callback(self, interaction: discord.Interaction):

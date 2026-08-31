@@ -295,6 +295,9 @@ DATABASE_URL=postgresql://journey:journey@localhost:5432/journey
 SERVER_ID=123456789012345678
 PUBLIC_CHANNEL_ID=123456789012345678
 ADMIN_CHANNEL_ID=123456789012345678
+WITHDRAW_CHANNEL_ID=123456789012345678
+AVAILABILITY_CHANNEL_ID_GT=123456789012345678      # GT drivers' availability channel
+AVAILABILITY_CHANNEL_ID_EMORY=123456789012345678   # Emory drivers' availability channel
 
 ALLOWED_ROLE_ID=123456789012345678
 GT_ROLE_ID=123456789012345678
@@ -326,11 +329,70 @@ Your slash commands will sync automatically.
 
 | Command | Description | Example |
 |--------|-------------|---------|
-| /announcement_create | Schedule a new announcement (refer to parameter definitions below for more information) | title:**Sunday Service Rides for 1/11/2026**<br>send_at:**2026-01-04 08:00**<br>end_at:**2026-01-10 23:00**<br>reactable:**True** |
+| /announcement_create | Schedule a new announcement (refer to parameter definitions below for more information). Optional `ride_date` links it to the availability schedule so assigned drivers are auto-registered on send. | title:**Sunday Service Rides for 1/11/2026**<br>send_at:**2026-01-04 08:00**<br>end_at:**2026-01-10 23:00**<br>reactable:**True**<br>ride_date:**2026-01-11** (optional) |
 | /announcement_edit | Edit a sent or closed announcement | announcement_id:**550e8400-e29b-41d4-a716-446655440000** |
 | /announcement_delete | Permanently delete an announcement | announcement_id:**550e8400-e29b-41d4-a716-446655440000** |
 | /announcement_unschedule | Remove a scheduled announcement | announcement_id:**550e8400-e29b-41d4-a716-446655440000** |
 | /announcement_view | View all announcements and content | (no arguments) |
+| /availability_create | Open a monthly driver-availability poll; posts a dropdown into the availability channel with every Friday PM / Sunday Service date that month, plus a live availability list in the admin channel. **A month can only be sent once.** | month:**2026-09**<br>exclude:**2026-09-25** (optional)<br>sunday_host:**2026-09-06J, 2026-09-13G** (optional) |
+| /availability_view | Show the current availability grid (per school) before assigning | month:**2026-09** |
+| /availability_assign | Auto-assign drivers toward each ride's base target (even load) and post the schedule to the admin channel. Full recompute — clears manual edits | month:**2026-09** |
+| /availability_adjust | Add or remove a single driver for one ride occurrence (use week-of to add extra drivers based on rider counts) | month:**2026-09**<br>date:**2026-09-06**<br>ride_type:**Sunday Service**<br>driver:**@user**<br>action:**add** |
+| /availability_close | Close the poll and disable the dropdown | month:**2026-09** |
+
+
+## 🗓 Monthly Driver Availability
+
+Plan a month of driving ahead of time:
+
+1. `/availability_create month:2026-09` posts a dropdown into **each school's own channel** — `AVAILABILITY_CHANNEL_ID_GT` and `AVAILABILITY_CHANNEL_ID_EMORY` (both required). Drivers select **every** date they can drive (re-selecting replaces their previous answer); a driver in the wrong school's channel is turned away. Buttons let a driver review (**📋 My availability**) or wipe (**🗑 Clear**) their picks. A month can only be created once — the poll row is kept permanently. *(GSU does not currently use the monthly availability system — only GT and Emory.)*
+
+   **`sunday_host`** (optional) sets which campus each Sunday service is at, so each school's dropdown only shows the Sundays *its* drivers are needed for. Format: comma-separated `YYYY-MM-DD` + a letter — **`J`** joint service (both schools drive), **`E`** Emory-hosted service (**GT** drives — GT students need rides to Emory), **`G`** GT-hosted service (**Emory** drives). If you use it, list **every** Sunday that month (e.g. `2026-09-06J, 2026-09-13G, 2026-09-20G, 2026-09-27E`). Friday PM dates always go to both schools. Omit `sunday_host` entirely and every date goes to both, as before.
+2. A **live availability list** is posted to the admin channel: per school, a "by ride" list (who's available each date) and a "by driver" list (each driver → their dates). It edits itself in place each time a driver responds. `/availability_view month:2026-09` shows the same on demand (ephemeral).
+3. `/availability_assign month:2026-09` fills each ride up to its **base target** (GT and Emory separately), spreading each driver's total across the month as evenly as their availability allows, and posts a per-school schedule to the admin channel. Rides that come in **below target** (including zero) are flagged with their count (e.g. `⚠ 2/6`) in the schedule and the command's reply — but **no "drivers needed" call-out is posted at this stage**. Any already-sent announcement for these rides is updated to match.
+4. `/availability_adjust …` adds/removes individual drivers beyond the auto-assignment (e.g. stacking extra drivers on a heavy week). Also updates any already-sent announcement for that ride.
+5. `/availability_close month:2026-09` disables the dropdown.
+
+**Base targets** live in `ASSIGN_TARGETS` in `availability.py`, keyed by `(school, ride_type)` — currently **GT Sunday Service = 10**, **GT Friday PM = 5**, **Emory Sunday Service = 6**, **Emory Friday PM = 3**; anything not listed defaults to **1**. Edit that dict to change them.
+
+If a driver submits or updates availability **after** the month is assigned, they're automatically slotted into any of their available rides that are still below target (never removing anyone); they get a DM-style ephemeral note and the admin channel is notified.
+
+Views persist across restarts. One poll per month, ever (enforced by a unique index on `availability_polls.month`).
+
+### Pipeline into weekly announcements
+
+When you create an announcement with a `ride_date` (and `reactable: True`), the drivers assigned to
+that `(ride_date, category)` in the availability schedule are **auto-registered as drivers** — they
+don't need to press *I'm a Driver*. Extra drivers can still sign up normally, and any driver can still
+*Withdraw*.
+
+An already-registered driver (assigned or self-signed-up) can press *I'm a Driver* again at any time
+to **update their seats, phone, and notes** — the modal is pre-filled with their current values and
+their spot on the list / sheet stays put. Only riders are asked to withdraw first.
+
+`ride_date` must land on a **Friday** (Friday PM) or a **Sunday** (Sunday Service), and its weekday
+must match the ride category entered in the announcement modal — otherwise the create fails and you
+re-run `/announcement_create`.
+
+The announcement's driver list is reconciled with the schedule at three points:
+
+1. when the announcement sends,
+2. when `/availability_assign` recomputes the month, and
+3. when `/availability_adjust` adds/removes a driver for that ride.
+
+Each reconcile **adds** assigned drivers who aren't signed up and **withdraws** drivers who were
+auto-added but are no longer assigned. Manually-signed-up drivers are never touched. The admin
+dashboard and Google Sheet are updated to match, and an admin-channel note summarises the changes.
+
+- Assigned drivers are always registered. If a driver has saved seats + phone (from a previous
+  signup, in `saved_info`) those are filled in; otherwise they're registered with blank seats/phone
+  and the admin note flags them to press *I'm a Driver* to fill it in.
+- Drivers assigned but no longer in the server are skipped and listed in the admin note.
+- Already-**closed** announcements are left alone.
+
+**Shortfall alert on close.** When a `ride_date` announcement's signups close, each school (GT /
+Emory) whose total driver **seats < riders** gets an urgent "drivers needed" post in its availability
+channel, showing the seat/rider counts and the shortfall. Schools that are covered get nothing.
 
 
 ## 📢 Creating Announcements
@@ -341,6 +403,7 @@ Your slash commands will sync automatically.
 | send_at | When the announcement is sent. Format: YYYY-MM-DD HH:MM (US/Eastern) |
 | end_at | When requests close. Must be same as or after send_at (US/Eastern). If the announcement is non-reactable, just enter some arbitrary time in the future.|
 | reactable | Whether users can submit ride requests and driver entries. If True, users will be able to submit ride requests and driver entries. If False, the announcement will have no buttons for submitting requests, and no admin dashboard will be displayed. In other words, it will be a simple announcement that could be used as reminders to sign up etc. |
+| ride_date | *(optional)* The calendar date of this ride, `YYYY-MM-DD`. Must be a Friday or Sunday and match the ride category. If set and `reactable` is True, drivers assigned to that date in the monthly availability schedule are auto-registered (and kept in sync). Leave blank to disable the pipeline. |
 
 ---
 
@@ -370,6 +433,9 @@ Your slash commands will sync automatically.
 - Deletes old announcements (180 days)
 - Keeps dashboards in sync
 
+> Run only **one** bot process against a database. Two live instances double-send announcements and
+> cause `10062 Unknown interaction` errors on slash commands.
+
 ---
 
 ### `dashboard.py`
@@ -377,6 +443,24 @@ Your slash commands will sync automatically.
 - Builds multi-page embeds
 - Aggregates drivers/riders by school
 - Refreshes dashboards on changes
+
+---
+
+### `availability.py`
+**Monthly driver availability & assignment**
+- Poll / occurrence / entry / assignment DB helpers
+- `auto_assign` — even-split driver assignment per school
+- Renders the availability list and the driving-schedule embeds
+- `prefill_announcement_drivers` / `sync_assignments_to_announcements` — reconcile a sent announcement's driver signups with the current assignments (add + auto-withdraw)
+- `request_drivers_if_short` — per-school "drivers needed" call-out, posted **only** when an announcement closes with driver seats < riders
+
+---
+
+### `availability_views.py`
+**Availability dropdown (persistent, one per school)**
+- Multi-select of ride dates + "My availability" / "Clear" buttons
+- School-scoped: only that school's drivers can use it
+- Replaces a driver's picks on each submit; disabled when the poll closes
 
 ---
 
@@ -416,6 +500,8 @@ Your slash commands will sync automatically.
 **Database schema**
 - `announcements`
 - `ride_entries`
+- `saved_info`
+- `availability_polls`, `availability_poll_messages`, `availability_occurrences`, `availability_entries`, `availability_assignments`
 
 ---
 
