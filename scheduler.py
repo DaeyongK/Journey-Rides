@@ -1,7 +1,7 @@
 import os
 import asyncio
 from db import fetchall, execute, fetchone
-from time_utils import now, get_cutoff_datetime, format_close_time
+from time_utils import now, get_cutoff_datetime, format_close_time, syncs_to_sheets
 from views import RideView
 from exporter import trigger_sheet_reset
 from dashboard import render_dashboard, refresh_dashboard_for_announcement
@@ -92,7 +92,9 @@ async def send_scheduled_announcements(bot) -> list:
                 admin_ch=admin_ch,
             )
 
-            await trigger_sheet_reset(announcement_id, content_category)
+            # Special Event announcements ("E") never touch the sheet
+            if syncs_to_sheets(content_category):
+                await trigger_sheet_reset(announcement_id, content_category)
 
         await execute(
             """
