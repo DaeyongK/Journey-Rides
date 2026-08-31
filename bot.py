@@ -83,8 +83,8 @@ async def on_ready():
     title="Bold heading on the post and dashboard. Free text, e.g. 'Sunday Service Rides for 1/11/2026'.",
     send_at="When it posts. 'YYYY-MM-DD HH:MM', US/Eastern 24h, e.g. 2026-01-04 08:00.",
     end_at="When signups close. Same format as send_at; must be >= send_at. Non-reactable: any future time.",
-    reactable="True = signup buttons + admin dashboard. False = plain announcement with no buttons.",
-    ride_date="Optional 'YYYY-MM-DD'. A Friday or Sunday matching the category. Auto-registers scheduled drivers.",
+    reactable="True = signup buttons + admin dashboard (pick category F/S/E in the modal). False = plain announcement.",
+    ride_date="Optional 'YYYY-MM-DD'. A Friday or Sunday matching the category (F/S only). Auto-registers scheduled drivers.",
 )
 async def create(
     interaction: discord.Interaction,
@@ -357,6 +357,8 @@ async def announcement_view(interaction: discord.Interaction):
             f"**Send:** {send_at_display}\n"
             f"**End:** {end_at_display}\n"
         )
+        if reactable and content_category:
+            embed_value += f"**Category:** {ride_type_label(content_category)}\n"
         if ride_date:
             embed_value += f"**Ride date:** {ride_date} (driver pipeline on)\n"
 

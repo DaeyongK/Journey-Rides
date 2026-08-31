@@ -403,7 +403,8 @@ channel, showing the seat/rider counts and the shortfall. Schools that are cover
 | send_at | When the announcement is sent. Format: YYYY-MM-DD HH:MM (US/Eastern) |
 | end_at | When requests close. Must be same as or after send_at (US/Eastern). If the announcement is non-reactable, just enter some arbitrary time in the future.|
 | reactable | Whether users can submit ride requests and driver entries. If True, users will be able to submit ride requests and driver entries. If False, the announcement will have no buttons for submitting requests, and no admin dashboard will be displayed. In other words, it will be a simple announcement that could be used as reminders to sign up etc. |
-| ride_date | *(optional)* The calendar date of this ride, `YYYY-MM-DD`. Must be a Friday or Sunday and match the ride category. If set and `reactable` is True, drivers assigned to that date in the monthly availability schedule are auto-registered (and kept in sync). Leave blank to disable the pipeline. |
+| Category *(modal)* | Asked in the pop-up modal when `reactable` is True. **F** = Friday PM, **S** = Sunday Service — these sync live to the Google Sheet (`Friday PM Imports` / `Sunday Service Imports`). **E** = Special Event — a full signup dashboard with the same buttons, but it **does not sync to Google Sheets at all** (no auto-wipe on send, no per-signup push). Admins pull the roster with the dashboard's **📊 Export Snapshot** button and paste it into a sheet manually. Use it for one-off events that don't belong in the recurring Friday/Sunday sheets. |
+| ride_date | *(optional)* The calendar date of this ride, `YYYY-MM-DD`. Must be a Friday or Sunday and match the ride category (**F/S only** — Special Events can't have a `ride_date`). If set and `reactable` is True, drivers assigned to that date in the monthly availability schedule are auto-registered (and kept in sync). Leave blank to disable the pipeline. |
 
 ---
 

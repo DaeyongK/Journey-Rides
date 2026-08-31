@@ -9,7 +9,18 @@ UTC = timezone.utc
 _FRIDAY = 4
 _SUNDAY = 6
 
-_RIDE_TYPE_LABELS = {"F": "Friday PM", "S": "Sunday Service"}
+_RIDE_TYPE_LABELS = {"F": "Friday PM", "S": "Sunday Service", "E": "Special Event"}
+
+# Categories a reactable announcement can carry. "F" and "S" sync live to the
+# Google Sheet; "E" (Special Event) does not — it only supports the manual
+# "Export Snapshot" button on the admin dashboard.
+ANNOUNCEMENT_CATEGORIES = ("F", "S", "E")
+SHEET_CATEGORIES = ("F", "S")
+
+
+# Whether signups for this category are pushed to / removed from Google Sheets
+def syncs_to_sheets(content_category) -> bool:
+    return content_category in SHEET_CATEGORIES
 
 
 # Returns the current UTC timestamp

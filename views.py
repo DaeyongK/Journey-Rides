@@ -3,7 +3,14 @@ import os
 import discord
 from db import execute, fetchone
 from exporter import remove_from_sheets, sync_to_sheets
-from time_utils import format_close_time, now, ride_type_for_date, ride_type_label
+from time_utils import (
+    format_close_time,
+    now,
+    ride_type_for_date,
+    ride_type_label,
+    ANNOUNCEMENT_CATEGORIES,
+    syncs_to_sheets,
+)
 from dashboard import refresh_dashboard_for_announcement
 from dotenv import load_dotenv
 load_dotenv()
@@ -63,9 +70,9 @@ class AnnouncementContentModal(discord.ui.Modal, title="Announcement Content"):
 
         if self.reactable:
             self.content_category = discord.ui.TextInput(
-                label="Ride Category",
+                label="Category",
                 style=discord.TextStyle.short,
-                placeholder="F for Friday PM or S for Sunday Service",
+                placeholder="F = Friday PM, S = Sunday Service, E = Special Event",
                 required=True,
                 max_length=1,
             )
@@ -78,15 +85,26 @@ class AnnouncementContentModal(discord.ui.Modal, title="Announcement Content"):
 
         if self.content_category:
             raw_category = self.content_category.value.strip().upper()
-            
-            if raw_category not in ["F", "S"]:
+
+            if raw_category not in ANNOUNCEMENT_CATEGORIES:
                 await interaction.response.send_message(
-                    "❌ **Invalid Ride Category!** Please recreate the announcement and type exactly **F** (for Friday PM) or **S** (for Sunday Service).",
+                    "❌ **Invalid Category!** Please recreate the announcement and type exactly "
+                    "**F** (Friday PM), **S** (Sunday Service), or **E** (Special Event).",
                     ephemeral=True
                 )
                 return
-            
+
             category_value = raw_category
+
+        # Special events aren't tied to a Friday/Sunday and don't use the driver pipeline
+        if self.ride_date and category_value == "E":
+            await interaction.response.send_message(
+                "❌ **Special Event announcements can't have a `ride_date`.** The driver "
+                "pipeline only applies to Friday PM / Sunday Service rides. Please run "
+                "`/announcement_create` again without `ride_date`.",
+                ephemeral=True,
+            )
+            return
 
         # The ride date must be the same kind of ride as the category entered above
         if self.ride_date and category_value:
@@ -156,9 +174,9 @@ class AnnouncementEditModal(discord.ui.Modal, title="Edit Announcement"):
 
         if old_content_category is not None:
             self.content_category = discord.ui.TextInput(
-                label="Ride Category",
+                label="Category",
                 style=discord.TextStyle.short,
-                placeholder="F for Friday PM or S for Sunday Service",
+                placeholder="F = Friday PM, S = Sunday Service, E = Special Event",
                 required=True,
                 max_length=1,
                 default=old_content_category
@@ -170,7 +188,16 @@ class AnnouncementEditModal(discord.ui.Modal, title="Edit Announcement"):
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
 
-        new_category = self.content_category.value if self.content_category else None
+        new_category = None
+        if self.content_category:
+            new_category = self.content_category.value.strip().upper()
+            if new_category not in ANNOUNCEMENT_CATEGORIES:
+                await interaction.followup.send(
+                    "❌ **Invalid Category!** Use exactly **F** (Friday PM), "
+                    "**S** (Sunday Service), or **E** (Special Event).",
+                    ephemeral=True,
+                )
+                return
 
         await execute(
             """
@@ -332,27 +359,30 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
 
         row_count = row["row_num"]
 
-        # Sync to Google Sheets and wait for response
-        google_receipt = await sync_to_sheets(
-                member=interaction.user,
-                announcement_id=self.announcement_id,
-                school=school,
-                role="driver",
-                seats=seats,
-                phone=phone,
-                info=info,
-                count=row_count,
-                content_category=content_category
-            )
-        
-        if google_receipt is None:
-            google_receipt = "Error: No response received from Google."
+        # Sync to Google Sheets and wait for response.
+        # Special Event announcements ("E") skip the sheet — they only use the
+        # manual "Export Snapshot" button on the admin dashboard.
+        if syncs_to_sheets(content_category):
+            google_receipt = await sync_to_sheets(
+                    member=interaction.user,
+                    announcement_id=self.announcement_id,
+                    school=school,
+                    role="driver",
+                    seats=seats,
+                    phone=phone,
+                    info=info,
+                    count=row_count,
+                    content_category=content_category
+                )
 
-        if "Error" in google_receipt or "⚠️" in google_receipt:
-            await interaction.edit_original_response(
-                content=f"❌ **Google Sheets Error:**\n`{google_receipt}`\n*Please try again or contact an admin.*"
-            )
-            return
+            if google_receipt is None:
+                google_receipt = "Error: No response received from Google."
+
+            if "Error" in google_receipt or "⚠️" in google_receipt:
+                await interaction.edit_original_response(
+                    content=f"❌ **Google Sheets Error:**\n`{google_receipt}`\n*Please try again or contact an admin.*"
+                )
+                return
         
         # Stores information
         await execute(
@@ -440,27 +470,30 @@ class RiderModal(discord.ui.Modal, title = "Rider Info"):
         
         row_count = row["row_num"]
         
-        # Sync to Google Sheets and wait for response
-        google_receipt =await sync_to_sheets(
-                member=interaction.user,
-                announcement_id=self.announcement_id,
-                school=school,
-                role="rider",
-                seats=None,
-                phone=phone,
-                info=info,
-                count=row_count,
-                content_category=content_category
-            )
-        
-        if google_receipt is None:
-            google_receipt = "Error: No response received from Google."
+        # Sync to Google Sheets and wait for response.
+        # Special Event announcements ("E") skip the sheet — they only use the
+        # manual "Export Snapshot" button on the admin dashboard.
+        if syncs_to_sheets(content_category):
+            google_receipt = await sync_to_sheets(
+                    member=interaction.user,
+                    announcement_id=self.announcement_id,
+                    school=school,
+                    role="rider",
+                    seats=None,
+                    phone=phone,
+                    info=info,
+                    count=row_count,
+                    content_category=content_category
+                )
 
-        if "Error" in google_receipt or "⚠️" in google_receipt:
-            await interaction.edit_original_response(
-                content=f"❌ **Google Sheets Error:**\n`{google_receipt}`\n*Please try again or contact an admin.*"
-            )
-            return
+            if google_receipt is None:
+                google_receipt = "Error: No response received from Google."
+
+            if "Error" in google_receipt or "⚠️" in google_receipt:
+                await interaction.edit_original_response(
+                    content=f"❌ **Google Sheets Error:**\n`{google_receipt}`\n*Please try again or contact an admin.*"
+                )
+                return
 
         await execute(
             """
@@ -635,27 +668,29 @@ class RideView(discord.ui.View):
 
             school, role, seats, phone, info, user_count = entry
             
-            # Wait for Google Sheets response before confirming withdrawal to user
-            google_receipt = await remove_from_sheets(
-                interaction.user, 
-                self.announcement_id, 
-                school, 
-                role, 
-                seats, 
-                phone, 
-                info, 
-                user_count, 
-                content_category
-            )
-
-            if google_receipt is None:
-                google_receipt = "Error: No response received from Google."
-
-            if "Error" in google_receipt or "⚠️" in google_receipt:
-                await interaction.edit_original_response(
-                    content=f"❌ **Google Sheets Error:**\n`{google_receipt}`\n*Your withdrawal was processed locally but failed to sync with Google Sheets. Please contact an admin to resolve this.*"
+            # Wait for Google Sheets response before confirming withdrawal to user.
+            # Special Event announcements ("E") don't touch the sheet.
+            if syncs_to_sheets(content_category):
+                google_receipt = await remove_from_sheets(
+                    interaction.user,
+                    self.announcement_id,
+                    school,
+                    role,
+                    seats,
+                    phone,
+                    info,
+                    user_count,
+                    content_category
                 )
-                return
+
+                if google_receipt is None:
+                    google_receipt = "Error: No response received from Google."
+
+                if "Error" in google_receipt or "⚠️" in google_receipt:
+                    await interaction.edit_original_response(
+                        content=f"❌ **Google Sheets Error:**\n`{google_receipt}`\n*Your withdrawal was processed locally but failed to sync with Google Sheets. Please contact an admin to resolve this.*"
+                    )
+                    return
 
             # Edit ephemeral response to confirm successful withdrawal
             await interaction.edit_original_response(content="✅ You have successfully withdrawn and been removed from the ride list.")
@@ -670,10 +705,7 @@ class RideView(discord.ui.View):
                 except Exception:
                     print("Withdraw channel error.")
 
-            if content_category == "F":
-                ride_type = "Friday PM"
-            elif content_category == "S":
-                ride_type = "Sunday Service"
+            ride_type = ride_type_label(content_category)
 
             if withdraw_channel and role == "driver":
                 await withdraw_channel.send(
