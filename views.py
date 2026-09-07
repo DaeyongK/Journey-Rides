@@ -2,9 +2,10 @@ import asyncio
 import os
 import discord
 from db import execute, fetchone
-from exporter import remove_from_sheets, sync_to_sheets
+from exporter import remove_from_sheets, sync_to_sheets, mark_withdrawn_in_sheets
 from time_utils import (
     format_close_time,
+    is_ride_day,
     now,
     ride_type_for_date,
     ride_type_label,
@@ -647,10 +648,11 @@ class RideView(discord.ui.View):
         await interaction.response.send_message("⏳ Withdrawing...", ephemeral=True)
 
         cat_record = await fetchone(
-            "SELECT content_category FROM announcements WHERE id=$1",
+            "SELECT content_category, ride_date FROM announcements WHERE id=$1",
             (self.announcement_id,)
         )
         content_category = cat_record[0] if cat_record else "F"
+        ride_date = cat_record[1] if cat_record else None
 
         try:
             entry = await fetchone(
@@ -670,8 +672,13 @@ class RideView(discord.ui.View):
             
             # Wait for Google Sheets response before confirming withdrawal to user.
             # Special Event announcements ("E") don't touch the sheet.
+            # On the day of the ride a rider's row is kept in the sheet and their
+            # note is set to "WITHDRAWN" instead of clearing the row (coordinators
+            # are already working off the printed sheet by then).
+            same_day_rider_withdrawal = role == "rider" and is_ride_day(ride_date)
             if syncs_to_sheets(content_category):
-                google_receipt = await remove_from_sheets(
+                sheet_action = mark_withdrawn_in_sheets if same_day_rider_withdrawal else remove_from_sheets
+                google_receipt = await sheet_action(
                     interaction.user,
                     self.announcement_id,
                     school,
@@ -687,13 +694,19 @@ class RideView(discord.ui.View):
                     google_receipt = "Error: No response received from Google."
 
                 if "Error" in google_receipt or "⚠️" in google_receipt:
+                    # Google can hand back a full HTML error page; keep the Discord
+                    # message under the 2000-char limit.
+                    snippet = " ".join(google_receipt.split())[:300]
                     await interaction.edit_original_response(
-                        content=f"❌ **Google Sheets Error:**\n`{google_receipt}`\n*Your withdrawal was processed locally but failed to sync with Google Sheets. Please contact an admin to resolve this.*"
+                        content=f"❌ **Google Sheets Error:**\n`{snippet}`\n*Your withdrawal was processed locally but failed to sync with Google Sheets. Please contact an admin to resolve this.*"
                     )
                     return
 
             # Edit ephemeral response to confirm successful withdrawal
-            await interaction.edit_original_response(content="✅ You have successfully withdrawn and been removed from the ride list.")
+            if same_day_rider_withdrawal:
+                await interaction.edit_original_response(content="✅ You have successfully withdrawn. Since the ride is today, your spot on the sheet has been marked **WITHDRAWN**.")
+            else:
+                await interaction.edit_original_response(content="✅ You have successfully withdrawn and been removed from the ride list.")
             await refresh_dashboard_for_announcement(interaction.client, self.announcement_id)
 
             WITHDRAW_CHANNEL_ID = int(os.getenv("WITHDRAW_CHANNEL_ID"))

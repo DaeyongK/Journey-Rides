@@ -61,6 +61,13 @@ function doPost(e) {
       }
       return ContentService.createTextOutput("✅ Cleared row " + rowNum);
     }
+
+    // Same-day withdrawal: keep the row, just mark the note cell "WITHDRAWN"
+    if (action === "withdraw_note") {
+      var noteCol = role === "driver" ? startIndex + 4 : startIndex + 7;
+      sheet.getRange(rowNum, noteCol, 1, 1).setValue("WITHDRAWN");
+      return ContentService.createTextOutput("✅ Marked row " + rowNum + " WITHDRAWN");
+    }
     
     // Sign up logic
     if (action === "add") {

@@ -83,6 +83,19 @@ async def remove_from_sheets(member, announcement_id, school, role, seats, phone
         except Exception as e:
             return (f"⚠️ Sheets Delete Error: {e}")
 
+async def mark_withdrawn_in_sheets(member, announcement_id, school, role, seats, phone, info, count, content_category):
+    """
+    Same-day withdrawal: keep the user's row in the sheet but overwrite their
+    note with "WITHDRAWN" (so coordinators working off the printed sheet don't
+    have every row below shift up on ride day).
+
+    Reuses the normal "add" path, so no extra Apps Script action is required.
+    """
+    return await sync_to_sheets(
+        member, announcement_id, school, role, seats, phone, "WITHDRAWN", count, content_category
+    )
+
+
 async def trigger_sheet_reset(announcement_id, content_category):
     payload = {
         "action": _reset,

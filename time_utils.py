@@ -125,6 +125,15 @@ def ride_type_for_date(d) -> str | None:
     return None
 
 
+# True when `ride_date` is today in Eastern time (i.e. the day of the ride).
+def is_ride_day(ride_date) -> bool:
+    if ride_date is None:
+        return False
+    if isinstance(ride_date, datetime):
+        ride_date = ride_date.date()
+    return ride_date == datetime.now(EASTERN).date()
+
+
 # Formats a ride date like 'Fri 09/05'
 def fmt_ride_date(d) -> str:
     if isinstance(d, datetime):
