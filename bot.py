@@ -1,11 +1,11 @@
 import os
 import uuid
-from datetime import date as _date
+from datetime import date as _date, timedelta
 import discord
 from discord import app_commands
 from discord.ext import commands
 from db import init_db, execute, fetchall, fetchone
-from time_utils import parse_to_utc_iso, fmt_time, month_ride_dates, parse_month, ride_type_label, ride_type_for_date
+from time_utils import parse_to_utc_iso, fmt_time, month_ride_dates, parse_month, ride_type_label, ride_type_for_date, combine_eastern_to_utc, fmt_ride_date
 from views import AnnouncementContentModal, AnnouncementEditModal, RideView, get_school
 from dashboard import render_dashboard
 from dashboard_paginator import DashboardPaginator
@@ -13,11 +13,18 @@ from scheduler import scheduler_loop, delete_announcement
 import availability
 from availability_views import AvailabilityView
 from dotenv import load_dotenv
+from service_templates import SERVICE_TEMPLATES
 load_dotenv()
 
 PUBLIC_CHANNEL_ID = int(os.getenv("PUBLIC_CHANNEL_ID"))
 ADMIN_CHANNEL_ID = int(os.getenv("ADMIN_CHANNEL_ID"))
 ALLOWED_ROLE_ID = int(os.getenv("ALLOWED_ROLE_ID"))
+
+SERVICE_TYPE_CHOICES = [
+    app_commands.Choice(name="Friday Prayer Room", value="F"),
+    app_commands.Choice(name="Sunday Joint Service", value="SJ"),
+    app_commands.Choice(name="Sunday College Service", value="SC"),
+]
 
 intents = discord.Intents.default()
 intents.members = True
@@ -761,5 +768,70 @@ async def availability_close(interaction: discord.Interaction, month: str):
 
     await interaction.followup.send(f"✅ Closed the availability poll for `{month}`.", ephemeral=True)
 
+@app_commands.default_permissions(manage_messages=True)
+@bot.tree.command(
+    name="announcement_service",
+    description="Auto-create the 3 linked weekly ride announcements (open/reminder/recap) from one date + type.",
+)
+@app_commands.describe(
+    ride_date="The Friday or Sunday this is for. 'YYYY-MM-DD', e.g. 2026-09-04.",
+    type="F = Friday Prayer Room, SJ = Sunday Joint Service, SC = Sunday College Service.",
+    onsite_poc="Name and phone number in one field, e.g. 'Jane Doe, 404-555-1234'.",
+)
+@app_commands.choices(type=SERVICE_TYPE_CHOICES)
+async def announcement_service(
+    interaction: discord.Interaction,
+    ride_date: str,
+    type: app_commands.Choice[str],
+    onsite_poc: str,
+):
+    tpl = SERVICE_TEMPLATES[type.value]
+
+    try:
+        rd = _date.fromisoformat(ride_date)
+    except ValueError:
+        await interaction.response.send_message(
+            "❌ Invalid `ride_date`. Use exactly `YYYY-MM-DD` (e.g. 2026-09-04).", ephemeral=True
+        )
+        return
+
+    if ride_type_for_date(rd) != tpl["ride_weekday"]:
+        needed = "Friday" if tpl["ride_weekday"] == "F" else "Sunday"
+        await interaction.response.send_message(
+            f"❌ `{ride_date}` is a {rd.strftime('%A')}, but **{tpl['label']}** must fall on a {needed}.",
+            ephemeral=True,
+        )
+        return
+
+    placeholders = {"date": fmt_ride_date(rd), "poc": onsite_poc}
+
+    created = []
+    for slot_key in ("open", "reminder", "recap"):
+        slot = tpl["slots"][slot_key]
+        send_at_dt = combine_eastern_to_utc(rd + timedelta(days=slot["send_offset_days"]), slot["send_time"])
+        end_at_dt = combine_eastern_to_utc(rd + timedelta(days=slot["end_offset_days"]), slot["end_time"])
+
+        aid = str(uuid.uuid4())
+        title = slot["title"].format(**placeholders)
+        body = slot["body"].format(**placeholders)
+
+        await execute(
+            """
+            INSERT INTO announcements
+                (id, title, content, content_category, send_at, end_at, state, reactable, ride_date)
+            VALUES ($1, $2, $3, $4, $5, $6, 'scheduled', $7, $8)
+            """,
+            (aid, title, body, tpl["content_category"], send_at_dt, end_at_dt, slot["reactable"], rd),
+        )
+        created.append((slot_key, aid, send_at_dt))
+
+    lines = "\n".join(
+        f"• **{slot_key}** — `{aid}` — sends {fmt_time(send_at)}"
+        for slot_key, aid, send_at in created
+    )
+    await interaction.response.send_message(
+        f"✅ Created **{tpl['label']}** series for `{ride_date}`:\n{lines}",
+        ephemeral=True,
+    )
 
 bot.run(os.getenv("DISCORD_TOKEN"))

@@ -130,3 +130,8 @@ def fmt_ride_date(d) -> str:
     if isinstance(d, datetime):
         d = d.date()
     return d.strftime("%a %m/%d")
+
+def combine_eastern_to_utc(d: date, time_str: str) -> datetime:
+    hh, mm = map(int, time_str.split(":"))
+    dt = datetime(d.year, d.month, d.day, hh, mm, tzinfo=EASTERN)
+    return dt.astimezone(UTC)
