@@ -11,11 +11,11 @@ _SUNDAY = 6
 
 _RIDE_TYPE_LABELS = {"F": "Friday PM", "S": "Sunday Service", "E": "Special Event"}
 
-# Categories a reactable announcement can carry. "F" and "S" sync live to the
-# Google Sheet; "E" (Special Event) does not — it only supports the manual
-# "Export Snapshot" button on the admin dashboard.
+# Categories a reactable announcement can carry. All three sync live to their own
+# Google Sheet tab (see googleappscript.js): "F" -> Friday PM Imports,
+# "S" -> Sunday Service Imports, "E" (Special Event) -> Special Event Imports.
 ANNOUNCEMENT_CATEGORIES = ("F", "S", "E")
-SHEET_CATEGORIES = ("F", "S")
+SHEET_CATEGORIES = ("F", "S", "E")
 
 
 # Whether signups for this category are pushed to / removed from Google Sheets

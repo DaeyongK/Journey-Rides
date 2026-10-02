@@ -13,6 +13,8 @@ function doPost(e) {
       sheetName = "Friday PM Imports";
     } else if (content === "S") {
       sheetName = "Sunday Service Imports";
+    } else if (content === "E") {
+      sheetName = "Special Event Imports";
     } else {
       return ContentService.createTextOutput("Error: Invalid content category.");
     }
