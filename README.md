@@ -334,11 +334,7 @@ Your slash commands will sync automatically.
 | /announcement_delete | Permanently delete an announcement | announcement_id:**550e8400-e29b-41d4-a716-446655440000** |
 | /announcement_unschedule | Remove a scheduled announcement | announcement_id:**550e8400-e29b-41d4-a716-446655440000** |
 | /announcement_view | View all announcements and content | (no arguments) |
-| /availability_create | Open a monthly driver-availability poll; posts a dropdown into the availability channel with every Friday PM / Sunday Service date that month, plus a live availability list in the admin channel. **A month can only be sent once.** | month:**2026-09**<br>exclude:**2026-09-25** (optional)<br>sunday_host:**2026-09-06J, 2026-09-13G** (optional) |
-| /availability_view | Show the current availability grid (per school) before assigning | month:**2026-09** |
-| /availability_assign | Auto-assign drivers toward each ride's base target (even load) and post the schedule to the admin channel. Full recompute — clears manual edits | month:**2026-09** |
-| /availability_adjust | Add or remove a single driver for one ride occurrence (use week-of to add extra drivers based on rider counts) | month:**2026-09**<br>date:**2026-09-06**<br>ride_type:**Sunday Service**<br>driver:**@user**<br>action:**add** |
-| /availability_close | Close the poll and disable the dropdown | month:**2026-09** |
+| /availability_create | Open a monthly driver-availability poll; posts a dropdown into the availability channel with every Friday PM / Sunday Service date that month, plus the live admin message in the admin channel. Everything after that (assign, adjust, view availability, close) is done from that message's buttons — see below. **A month can only be sent once.** | month:**2026-09**<br>exclude:**2026-09-25** (optional)<br>sunday_host:**2026-09-06J, 2026-09-13G** (optional) |
 
 
 ## 🗓 Monthly Driver Availability
@@ -348,10 +344,11 @@ Plan a month of driving ahead of time:
 1. `/availability_create month:2026-09` posts a dropdown into **each school's own channel** — `AVAILABILITY_CHANNEL_ID_GT` and `AVAILABILITY_CHANNEL_ID_EMORY` (both required). Drivers select **every** date they can drive (re-selecting replaces their previous answer); a driver in the wrong school's channel is turned away. Buttons let a driver review (**📋 My availability**) or wipe (**🗑 Clear**) their picks. A month can only be created once — the poll row is kept permanently. *(GSU does not currently use the monthly availability system — only GT and Emory.)*
 
    **`sunday_host`** (optional) sets which campus each Sunday service is at, so each school's dropdown only shows the Sundays *its* drivers are needed for. Format: comma-separated `YYYY-MM-DD` + a letter — **`J`** joint service (both schools drive), **`E`** Emory-hosted service (**GT** drives — GT students need rides to Emory), **`G`** GT-hosted service (**Emory** drives). If you use it, list **every** Sunday that month (e.g. `2026-09-06J, 2026-09-13G, 2026-09-20G, 2026-09-27E`). Friday PM dates always go to both schools. Omit `sunday_host` entirely and every date goes to both, as before.
-2. A **live availability list** is posted to the admin channel: per school, a "by ride" list (who's available each date) and a "by driver" list (each driver → their dates). It edits itself in place each time a driver responds. `/availability_view month:2026-09` shows the same on demand (ephemeral).
-3. `/availability_assign month:2026-09` fills each ride up to its **base target** (GT and Emory separately), spreading each driver's total across the month as evenly as their availability allows, and posts a per-school schedule to the admin channel. Rides that come in **below target** (including zero) are flagged with their count (e.g. `⚠ 2/6`) in the schedule and the command's reply — but **no "drivers needed" call-out is posted at this stage**. Any already-sent announcement for these rides is updated to match.
-4. `/availability_adjust …` adds/removes individual drivers beyond the auto-assignment (e.g. stacking extra drivers on a heavy week). Also updates any already-sent announcement for that ride.
-5. `/availability_close month:2026-09` disables the dropdown.
+2. A single **live admin message** is posted to the admin channel for the month, with a row of admin buttons underneath (only members with **Manage Messages** can use them). Until the month is assigned it shows the availability list: per school, a "by ride" list (who's available each date) and a "by driver" list (each driver → their dates). It edits itself in place each time a driver responds (and is re-posted if someone deletes it).
+3. **🚗 Assign drivers** fills each ride up to its **base target** (GT and Emory separately), spreading each driver's total across the month as evenly as their availability allows. The live admin message then switches to the per-school driving schedule and is re-posted at the bottom of the admin channel; from then on it keeps updating in place on adjustments and late availability. Rides that come in **below target** (including zero) are flagged with their count (e.g. `⚠ 2/6`) in the schedule and the button's reply — but **no "drivers needed" call-out is posted at this stage**. Any already-sent announcement for these rides is updated to match. Once assigned the button reads **Re-assign drivers** and asks for confirmation, because a full recompute clears manual edits.
+4. **✏️ Adjust** opens a private picker (ride + driver, then **Add** / **Remove**) for changes beyond the auto-assignment (e.g. stacking extra drivers on a heavy week). Each change also updates any already-sent announcement for that ride. Works after the poll is closed too.
+5. **📋 Availability** shows the availability list privately — handy once the admin message has switched to the schedule.
+6. **🔒 Close poll** (asks for confirmation) disables the drivers' dropdowns and the Assign / Close buttons.
 
 **Base targets** live in `ASSIGN_TARGETS` in `availability.py`, keyed by `(school, ride_type)` — currently **GT Sunday Service = 10**, **GT Friday PM = 5**, **Emory Sunday Service = 6**, **Emory Friday PM = 3**; anything not listed defaults to **1**. Edit that dict to change them.
 
@@ -377,8 +374,8 @@ re-run `/announcement_create`.
 The announcement's driver list is reconciled with the schedule at three points:
 
 1. when the announcement sends,
-2. when `/availability_assign` recomputes the month, and
-3. when `/availability_adjust` adds/removes a driver for that ride.
+2. when **🚗 Assign drivers** recomputes the month, and
+3. when **✏️ Adjust** adds/removes a driver for that ride.
 
 Each reconcile **adds** assigned drivers who aren't signed up and **withdraws** drivers who were
 auto-added but are no longer assigned. Manually-signed-up drivers are never touched. The admin
@@ -450,18 +447,13 @@ channel, showing the seat/rider counts and the shortfall. Schools that are cover
 ### `availability.py`
 **Monthly driver availability & assignment**
 - Poll / occurrence / entry / assignment DB helpers
-- `auto_assign` — even-split driver assignment per school
+- `plan_assignments` (pure) / `auto_assign` — even-split driver assignment per school
 - Renders the availability list and the driving-schedule embeds
+- `refresh_admin_message` — the one live admin message per poll (availability first, the schedule once assigned), with the `AdminPanelView` buttons (Assign / Adjust / Availability / Close → `run_assign` / `run_adjust` / `run_close`)
+- `AvailabilityView` — persistent per-school dropdown (multi-select of ride dates + "My availability" / "Clear" buttons; school-scoped; disabled when the poll closes), re-registered on startup by `restore_views`
+- `AvailabilityCommands` — the `/availability_create` slash command (a cog added in `bot.py`)
 - `prefill_announcement_drivers` / `sync_assignments_to_announcements` — reconcile a sent announcement's driver signups with the current assignments (add + auto-withdraw)
 - `request_drivers_if_short` — per-school "drivers needed" call-out, posted **only** when an announcement closes with driver seats < riders
-
----
-
-### `availability_views.py`
-**Availability dropdown (persistent, one per school)**
-- Multi-select of ride dates + "My availability" / "Clear" buttons
-- School-scoped: only that school's drivers can use it
-- Replaces a driver's picks on each submit; disabled when the poll closes
 
 ---
 
