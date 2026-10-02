@@ -192,9 +192,10 @@ This project uses a **Google Apps Script Web App** to automatically export the r
 
 1. Go to Google Sheets and create a new spreadsheet (or open existing one).
 2. Look at the tabs at the bottom left of the screen. 
-3. You **must** create or rename two tabs to match these exactly (capitalization and spaces matter!):
+3. You **must** create or rename three tabs to match these exactly (capitalization and spaces matter!):
    - `Friday PM Imports`
    - `Sunday Service Imports`
+   - `Special Event Imports`
 4. Do **NOT** add column headers to the sheet.
 
 ---
@@ -255,7 +256,7 @@ Add it to your `.env` file just like your Discord token:
 1. Open the public spreadsheet and go to the import pages.
 2. Click the top-left cell where you want the data to be imported to and type:
    ```=IMPORTRANGE("PRIVATE_SHEET_URL", "SHEET_NAME_FROM_PRIVATE_URL!A1:Z100")```
-   Do this for each page, Friday PM Imports (Private) -> Friday PM Import (Public), Sunday Service Imports (Private) -> Sunday Service Import (Public).
+   Do this for each page, Friday PM Imports (Private) -> Friday PM Import (Public), Sunday Service Imports (Private) -> Sunday Service Import (Public), and Special Event Imports (Private) -> a public Special Event tab if you want one.
 
 ### 🔐 Security Notes
 
@@ -400,7 +401,7 @@ channel, showing the seat/rider counts and the shortfall. Schools that are cover
 | send_at | When the announcement is sent. Format: YYYY-MM-DD HH:MM (US/Eastern) |
 | end_at | When requests close. Must be same as or after send_at (US/Eastern). If the announcement is non-reactable, just enter some arbitrary time in the future.|
 | reactable | Whether users can submit ride requests and driver entries. If True, users will be able to submit ride requests and driver entries. If False, the announcement will have no buttons for submitting requests, and no admin dashboard will be displayed. In other words, it will be a simple announcement that could be used as reminders to sign up etc. |
-| Category *(modal)* | Asked in the pop-up modal when `reactable` is True. **F** = Friday PM, **S** = Sunday Service — these sync live to the Google Sheet (`Friday PM Imports` / `Sunday Service Imports`). **E** = Special Event — a full signup dashboard with the same buttons, but it **does not sync to Google Sheets at all** (no auto-wipe on send, no per-signup push). Admins pull the roster with the dashboard's **📊 Export Snapshot** button and paste it into a sheet manually. Use it for one-off events that don't belong in the recurring Friday/Sunday sheets. |
+| Category *(modal)* | Asked in the pop-up modal when `reactable` is True. **F** = Friday PM, **S** = Sunday Service — these sync live to the Google Sheet (`Friday PM Imports` / `Sunday Service Imports`). **E** = Special Event — use it for one-off events that don't belong in the recurring Friday/Sunday sheets. It syncs live to its own tab, `Special Event Imports`, exactly like F/S: the tab is wiped when the announcement sends, and only the **most recently sent** Special Event syncs — if two overlap, sign-ups for the older one stop reaching the sheet (use the dashboard's **📊 Export Snapshot** for it). Special Events can't have a `ride_date`, so the driver pipeline and same-day "WITHDRAWN" marking don't apply. |
 | ride_date | *(optional)* The calendar date of this ride, `YYYY-MM-DD`. Must be a Friday or Sunday and match the ride category (**F/S only** — Special Events can't have a `ride_date`). If set and `reactable` is True, drivers assigned to that date in the monthly availability schedule are auto-registered (and kept in sync). Leave blank to disable the pipeline. |
 
 ---

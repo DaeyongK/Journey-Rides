@@ -92,7 +92,7 @@ async def send_scheduled_announcements(bot) -> list:
                 admin_ch=admin_ch,
             )
 
-            # Special Event announcements ("E") never touch the sheet
+            # Wipe this category's sheet tab and make it track the new announcement
             if syncs_to_sheets(content_category):
                 await trigger_sheet_reset(announcement_id, content_category)
 

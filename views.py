@@ -362,8 +362,6 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
         row_count = row["row_num"]
 
         # Sync to Google Sheets and wait for response.
-        # Special Event announcements ("E") skip the sheet — they only use the
-        # manual "Export Snapshot" button on the admin dashboard.
         if syncs_to_sheets(content_category):
             google_receipt = await sync_to_sheets(
                     member=interaction.user,
@@ -474,8 +472,6 @@ class RiderModal(discord.ui.Modal, title = "Rider Info"):
         row_count = row["row_num"]
         
         # Sync to Google Sheets and wait for response.
-        # Special Event announcements ("E") skip the sheet — they only use the
-        # manual "Export Snapshot" button on the admin dashboard.
         if syncs_to_sheets(content_category):
             google_receipt = await sync_to_sheets(
                     member=interaction.user,
@@ -673,7 +669,6 @@ class RideView(discord.ui.View):
             school, role, seats, phone, info, user_count = entry
             
             # Wait for Google Sheets response before confirming withdrawal to user.
-            # Special Event announcements ("E") don't touch the sheet.
             # On the day of the ride a rider's row is kept in the sheet and their
             # note is set to "WITHDRAWN" instead of clearing the row (coordinators
             # are already working off the printed sheet by then).
