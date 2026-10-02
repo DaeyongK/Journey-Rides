@@ -1,3 +1,4 @@
+import asyncio
 import os
 import asyncpg
 from dotenv import load_dotenv
@@ -8,6 +9,9 @@ if not DATABASE_URL:
     raise RuntimeError("DATABASE_URL is required")
 
 _pool = None
+
+# Only one sign-up at a time may pick the next sheet row (row_num).
+row_lock = asyncio.Lock()
 
 
 async def init_db():

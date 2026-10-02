@@ -87,9 +87,9 @@ CREATE TABLE IF NOT EXISTS availability_polls (
     -- 'YYYY-MM' (Eastern)
     month TEXT NOT NULL,
 
-    -- Discord message IDs (snowflakes), both in ADMIN_CHANNEL_ID
-    admin_message_id BIGINT,              -- driving schedule
-    admin_availability_message_id BIGINT, -- every driver's availability (live-updated)
+    -- Discord message ID (snowflake) in ADMIN_CHANNEL_ID: the live admin
+    -- message — availability list, then the driving schedule once assigned
+    admin_message_id BIGINT,
 
     -- open | assigned | closed
     state TEXT NOT NULL DEFAULT 'open'
@@ -192,9 +192,6 @@ ALTER TABLE announcements
 ALTER TABLE ride_entries
     ADD COLUMN IF NOT EXISTS auto_assigned BOOLEAN NOT NULL DEFAULT FALSE;
 
-ALTER TABLE availability_polls
-    ADD COLUMN IF NOT EXISTS admin_availability_message_id BIGINT;
-
 ALTER TABLE availability_occurrences
     ADD COLUMN IF NOT EXISTS schools TEXT NOT NULL DEFAULT 'GT,Emory';
 
@@ -204,6 +201,18 @@ ALTER TABLE availability_occurrences
 ALTER TABLE availability_polls       DROP COLUMN IF EXISTS channel_message_id;
 ALTER TABLE availability_entries     DROP COLUMN IF EXISTS updated_at;
 ALTER TABLE availability_assignments DROP COLUMN IF EXISTS updated_at;
+
+-- admin_availability_message_id was merged into admin_message_id. Carry any
+-- old id over; the column is left in place (unused) for a safe rollback.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_name = 'availability_polls'
+               AND column_name = 'admin_availability_message_id') THEN
+    UPDATE availability_polls
+       SET admin_message_id = COALESCE(admin_message_id, admin_availability_message_id);
+  END IF;
+END $$;
 
 DROP INDEX IF EXISTS idx_ride_entries_announcement;
 DROP INDEX IF EXISTS idx_avail_occurrences_poll;

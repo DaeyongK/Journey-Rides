@@ -1,7 +1,7 @@
 import asyncio
 import os
 import discord
-from db import execute, fetchone
+from db import execute, fetchone, row_lock
 from exporter import remove_from_sheets, sync_to_sheets, mark_withdrawn_in_sheets
 from time_utils import (
     format_close_time,
@@ -333,30 +333,31 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
         # Upsert: a driver may already have a row if they were auto-registered
         # from the availability schedule — in that case keep their row_num and
         # just fill in the details they're now submitting.
-        row = await fetchone(
-            """
-            INSERT INTO ride_entries (
-                announcement_id, user_id, school, role, seats, updated_at, phone, info, row_num, auto_assigned
+        async with row_lock:
+            row = await fetchone(
+                """
+                INSERT INTO ride_entries (
+                    announcement_id, user_id, school, role, seats, updated_at, phone, info, row_num, auto_assigned
+                )
+                SELECT
+                    $1, $2, $3, 'driver', $4, NOW(), $5, $6,
+                    COALESCE(MAX(row_num), 0) + 1, FALSE
+                FROM ride_entries
+                WHERE announcement_id = $1
+                  AND role = 'driver'
+                  AND school = $3
+                ON CONFLICT (announcement_id, user_id) DO UPDATE SET
+                    school = EXCLUDED.school,
+                    role = 'driver',
+                    seats = EXCLUDED.seats,
+                    phone = EXCLUDED.phone,
+                    info = EXCLUDED.info,
+                    updated_at = NOW(),
+                    auto_assigned = FALSE
+                RETURNING row_num
+                """,
+                (self.announcement_id, interaction.user.id, school, seats, phone, info)
             )
-            SELECT
-                $1, $2, $3, 'driver', $4, NOW(), $5, $6,
-                COALESCE(MAX(row_num), 0) + 1, FALSE
-            FROM ride_entries
-            WHERE announcement_id = $1
-              AND role = 'driver'
-              AND school = $3
-            ON CONFLICT (announcement_id, user_id) DO UPDATE SET
-                school = EXCLUDED.school,
-                role = 'driver',
-                seats = EXCLUDED.seats,
-                phone = EXCLUDED.phone,
-                info = EXCLUDED.info,
-                updated_at = NOW(),
-                auto_assigned = FALSE
-            RETURNING row_num
-            """,
-            (self.announcement_id, interaction.user.id, school, seats, phone, info)
-        )
 
         row_count = row["row_num"]
 
@@ -452,22 +453,23 @@ class RiderModal(discord.ui.Modal, title = "Rider Info"):
                 await interaction.edit_original_response(content="❌ Additional information is limited to 130 characters.")
             return
 
-        row = await fetchone(
-            """
-            INSERT INTO ride_entries (
-                announcement_id, user_id, school, role, seats, updated_at, phone, info, row_num
+        async with row_lock:
+            row = await fetchone(
+                """
+                INSERT INTO ride_entries (
+                    announcement_id, user_id, school, role, seats, updated_at, phone, info, row_num
+                )
+                SELECT
+                    $1, $2, $3, 'rider', NULL, NOW(), $4, $5,
+                    COALESCE(MAX(row_num), 0) + 1
+                FROM ride_entries
+                WHERE announcement_id = $1
+                  AND role = 'rider'
+                  AND school = $3
+                RETURNING row_num;
+                """,
+                (self.announcement_id, interaction.user.id, school, phone, info)
             )
-            SELECT
-                $1, $2, $3, 'rider', NULL, NOW(), $4, $5,
-                COALESCE(MAX(row_num), 0) + 1
-            FROM ride_entries
-            WHERE announcement_id = $1
-              AND role = 'rider'
-              AND school = $3
-            RETURNING row_num;
-            """,
-            (self.announcement_id, interaction.user.id, school, phone, info)
-        )
         
         row_count = row["row_num"]
         
