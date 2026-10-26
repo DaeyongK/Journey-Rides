@@ -9,13 +9,22 @@ UTC = timezone.utc
 _FRIDAY = 4
 _SUNDAY = 6
 
-_RIDE_TYPE_LABELS = {"F": "Friday PM", "S": "Sunday Service", "E": "Special Event"}
+_RIDE_TYPE_LABELS = {
+    "F": "Friday PM",
+    "S": "Sunday Service",
+    "E": "Special Event",
+    "X": "Special Event (Export Only)",
+}
 
-# Categories a reactable announcement can carry. All three sync live to their own
+# Categories a reactable announcement can carry. F/S/E sync live to their own
 # Google Sheet tab (see googleappscript.js): "F" -> Friday PM Imports,
 # "S" -> Sunday Service Imports, "E" (Special Event) -> Special Event Imports.
-ANNOUNCEMENT_CATEGORIES = ("F", "S", "E")
+# "X" (Special Event, export only) never touches the sheet — admins pull the
+# roster with the dashboard's "Export Snapshot" button instead.
+ANNOUNCEMENT_CATEGORIES = ("F", "S", "E", "X")
 SHEET_CATEGORIES = ("F", "S", "E")
+# One-off events: no ride_date / driver pipeline
+SPECIAL_EVENT_CATEGORIES = ("E", "X")
 
 
 # Whether signups for this category are pushed to / removed from Google Sheets

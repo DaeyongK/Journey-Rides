@@ -6,6 +6,7 @@ from exporter import remove_from_sheets, sync_to_sheets, mark_withdrawn_in_sheet
 from time_utils import (
     format_close_time,
     is_ride_day,
+    SPECIAL_EVENT_CATEGORIES,
     now,
     ride_type_for_date,
     ride_type_label,
@@ -73,7 +74,7 @@ class AnnouncementContentModal(discord.ui.Modal, title="Announcement Content"):
             self.content_category = discord.ui.TextInput(
                 label="Category",
                 style=discord.TextStyle.short,
-                placeholder="F = Friday PM, S = Sunday Service, E = Special Event",
+                placeholder="F = Friday PM, S = Sunday Service, E = Special Event, X = Export-only Event",
                 required=True,
                 max_length=1,
             )
@@ -90,7 +91,8 @@ class AnnouncementContentModal(discord.ui.Modal, title="Announcement Content"):
             if raw_category not in ANNOUNCEMENT_CATEGORIES:
                 await interaction.response.send_message(
                     "❌ **Invalid Category!** Please recreate the announcement and type exactly "
-                    "**F** (Friday PM), **S** (Sunday Service), or **E** (Special Event).",
+                    "**F** (Friday PM), **S** (Sunday Service), **E** (Special Event), "
+                    "or **X** (Special Event, export only — no sheet sync).",
                     ephemeral=True
                 )
                 return
@@ -98,7 +100,7 @@ class AnnouncementContentModal(discord.ui.Modal, title="Announcement Content"):
             category_value = raw_category
 
         # Special events aren't tied to a Friday/Sunday and don't use the driver pipeline
-        if self.ride_date and category_value == "E":
+        if self.ride_date and category_value in SPECIAL_EVENT_CATEGORIES:
             await interaction.response.send_message(
                 "❌ **Special Event announcements can't have a `ride_date`.** The driver "
                 "pipeline only applies to Friday PM / Sunday Service rides. Please run "
@@ -177,7 +179,7 @@ class AnnouncementEditModal(discord.ui.Modal, title="Edit Announcement"):
             self.content_category = discord.ui.TextInput(
                 label="Category",
                 style=discord.TextStyle.short,
-                placeholder="F = Friday PM, S = Sunday Service, E = Special Event",
+                placeholder="F = Friday PM, S = Sunday Service, E = Special Event, X = Export-only Event",
                 required=True,
                 max_length=1,
                 default=old_content_category
@@ -195,7 +197,8 @@ class AnnouncementEditModal(discord.ui.Modal, title="Edit Announcement"):
             if new_category not in ANNOUNCEMENT_CATEGORIES:
                 await interaction.followup.send(
                     "❌ **Invalid Category!** Use exactly **F** (Friday PM), "
-                    "**S** (Sunday Service), or **E** (Special Event).",
+                    "**S** (Sunday Service), **E** (Special Event), or "
+                    "**X** (Special Event, export only — no sheet sync).",
                     ephemeral=True,
                 )
                 return
