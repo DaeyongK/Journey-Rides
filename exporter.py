@@ -3,7 +3,8 @@ import io
 import os
 import aiohttp
 import traceback
-from db import fetchall
+from db import fetchall, fetchone
+from time_utils import asks_after_service
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -18,7 +19,7 @@ _add = "add"
 _delete = "delete"
 _reset = "reset"
 
-async def sync_to_sheets(member, announcement_id, school, role, seats, phone, info, count, content_category):
+async def sync_to_sheets(member, announcement_id, school, role, seats, phone, info, count, content_category, after_service=None):
     
     """
     Sends a single user's ride entry to the Google Sheet.
@@ -36,6 +37,7 @@ async def sync_to_sheets(member, announcement_id, school, role, seats, phone, in
         "seats": str(seats) if seats else "",
         "phone": str(phone),
         "info": str(info) or "",
+        "after_service": str(after_service or ""),
         "content_category": str(clean_category),
         "count": str(clean_count)
     }
@@ -55,7 +57,7 @@ async def sync_to_sheets(member, announcement_id, school, role, seats, phone, in
             print(f"⚠️ Unexpected Sheets Sync Error: {e}")
             traceback.print_exc()
 
-async def remove_from_sheets(member, announcement_id, school, role, seats, phone, info, count, content_category):
+async def remove_from_sheets(member, announcement_id, school, role, seats, phone, info, count, content_category, after_service=None):
     clean_category = content_category[0] if type(content_category).__name__ == 'Record' else content_category
     clean_count = count[0] if type(count).__name__ == 'Record' else count
 
@@ -83,7 +85,7 @@ async def remove_from_sheets(member, announcement_id, school, role, seats, phone
         except Exception as e:
             return (f"⚠️ Sheets Delete Error: {e}")
 
-async def mark_withdrawn_in_sheets(member, announcement_id, school, role, seats, phone, info, count, content_category):
+async def mark_withdrawn_in_sheets(member, announcement_id, school, role, seats, phone, info, count, content_category, after_service=None):
     """
     Same-day withdrawal: keep the user's row in the sheet but overwrite their
     note with "WITHDRAWN" (so coordinators working off the printed sheet don't
@@ -92,7 +94,8 @@ async def mark_withdrawn_in_sheets(member, announcement_id, school, role, seats,
     Reuses the normal "add" path, so no extra Apps Script action is required.
     """
     return await sync_to_sheets(
-        member, announcement_id, school, role, seats, phone, "WITHDRAWN", count, content_category
+        member, announcement_id, school, role, seats, phone, "WITHDRAWN", count, content_category,
+        after_service,
     )
 
 
@@ -117,14 +120,17 @@ async def trigger_sheet_reset(announcement_id, content_category):
         
 async def get_pasteable_text(bot, announcement_id) -> str:
     rows = await fetchall(
-        "SELECT user_id, school, role, seats, phone, info FROM ride_entries WHERE announcement_id=$1",
+        "SELECT user_id, school, role, seats, phone, info, after_service FROM ride_entries WHERE announcement_id=$1",
         (announcement_id,)
     )
+    cat = await fetchone("SELECT content_category FROM announcements WHERE id=$1", (announcement_id,))
+    # Sunday Service sheets have an extra F/R column for drivers and riders
+    with_fr = asks_after_service(cat["content_category"] if cat else None)
 
     organized = {k: {"drivers": [], "riders": []} for k, _ in SCHOOL_CONFIG}
     guild = bot.get_guild(int(os.getenv("SERVER_ID")))
 
-    for uid, school, role, seats, phone, info in rows:
+    for uid, school, role, seats, phone, info, after_service in rows:
         if school not in organized or not guild:
             continue
 
@@ -137,10 +143,11 @@ async def get_pasteable_text(bot, announcement_id) -> str:
 
         name = member.display_name
 
+        fr = after_service or ""
         if role == "driver":
-            organized[school]["drivers"].append((name, seats, phone, info))
+            organized[school]["drivers"].append((name, seats, phone, info, fr))
         else:
-            organized[school]["riders"].append((name, phone, info))
+            organized[school]["riders"].append((name, phone, info, fr))
 
     output = io.StringIO()
 
@@ -156,25 +163,23 @@ async def get_pasteable_text(bot, announcement_id) -> str:
             drivers = organized[key]["drivers"]
             riders = organized[key]["riders"]
 
-            d_name, d_seats, d_phone, d_info = ("", "", "", "")
-            r_name, r_phone, r_info = ("", "", "")
+            d_name, d_seats, d_phone, d_info, d_fr = ("", "", "", "", "")
+            r_name, r_phone, r_info, r_fr = ("", "", "", "")
 
             if i < len(drivers):
-                d_name, d_seats, d_phone, d_info = drivers[i]
+                d_name, d_seats, d_phone, d_info, d_fr = drivers[i]
                 d_info = d_info or "" # If d_info is null, d_info = ""
             if i < len(riders):
-                r_name, r_phone, r_info = riders[i]
+                r_name, r_phone, r_info, r_fr = riders[i]
+                r_info = r_info or ""
 
-            row_parts += [
-                d_name,
-                str(d_seats),
-                d_phone, 
-                d_info, 
-                r_name,
-                r_phone,
-                r_info,
-                ""
-            ]
+            # Must match the column layout in googleappscript.js
+            if with_fr:
+                row_parts += [d_name, str(d_seats), d_phone, d_info, d_fr,
+                              r_name, r_phone, r_info, r_fr, ""]
+            else:
+                row_parts += [d_name, str(d_seats), d_phone, d_info,
+                              r_name, r_phone, r_info, ""]
 
         output.write("\t".join(row_parts) + "\n")
 

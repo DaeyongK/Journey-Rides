@@ -198,6 +198,15 @@ This project uses a **Google Apps Script Web App** to automatically export the r
    - `Special Event Imports`
 4. Do **NOT** add column headers to the sheet.
 
+Each school (GT, Emory, GSU, left to right) gets its own block of columns:
+
+| Tab | Columns per school |
+|-----|--------------------|
+| `Friday PM Imports`, `Special Event Imports` (8) | Driver name, seats, phone, info · Rider name, phone, info · *(blank)* |
+| `Sunday Service Imports` (10) | Driver name, seats, phone, info, **F/R** · Rider name, phone, info, **F/R** · *(blank)* |
+
+**F/R** is the Sunday Service signup question "F for Food, R for return to campus".
+
 ---
 
 ### 2️⃣ Add the Apps Script Code
@@ -255,7 +264,7 @@ Add it to your `.env` file just like your Discord token:
 
 1. Open the public spreadsheet and go to the import pages.
 2. Click the top-left cell where you want the data to be imported to and type:
-   ```=IMPORTRANGE("PRIVATE_SHEET_URL", "SHEET_NAME_FROM_PRIVATE_URL!A1:Z100")```
+   ```=IMPORTRANGE("PRIVATE_SHEET_URL", "SHEET_NAME_FROM_PRIVATE_URL!A1:AD100")```
    Do this for each page, Friday PM Imports (Private) -> Friday PM Import (Public), Sunday Service Imports (Private) -> Sunday Service Import (Public), and Special Event Imports (Private) -> a public Special Event tab if you want one.
 
 ### 🔐 Security Notes
@@ -365,7 +374,7 @@ don't need to press *I'm a Driver*. Extra drivers can still sign up normally, an
 *Withdraw*.
 
 An already-registered driver (assigned or self-signed-up) can press *I'm a Driver* again at any time
-to **update their seats, phone, and notes** — the modal is pre-filled with their current values and
+to **update their seats, phone, and notes** (and, for Sunday Service, their F/R answer) — the modal is pre-filled with their current values and
 their spot on the list / sheet stays put. Only riders are asked to withdraw first.
 
 `ride_date` must land on a **Friday** (Friday PM) or a **Sunday** (Sunday Service), and its weekday

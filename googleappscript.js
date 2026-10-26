@@ -52,40 +52,46 @@ function doPost(e) {
     var schoolIndex = schools.indexOf(school);
     if (schoolIndex === -1) schoolIndex = 0; // Fallback to GT if something goes weird
     
-    var startIndex = schoolIndex * 8; 
+    // Column layout per school block (1-based offsets from startIndex):
+    //   Friday PM / Special Event (8 wide):
+    //     driver: name, seats, phone, info | rider: name, phone, info | blank
+    //   Sunday Service (10 wide, adds F/R = Food or Return to campus):
+    //     driver: name, seats, phone, info, F/R | rider: name, phone, info, F/R | blank
+    var hasFR = content === "S";
+    var driverWidth = hasFR ? 5 : 4;
+    var riderWidth = hasFR ? 4 : 3;
+    var blockWidth = driverWidth + riderWidth + 1;
+
+    var startIndex = schoolIndex * blockWidth;
 
     // Withdrawal logic
     if (action === "delete") {
       if (role === "driver") {
-        sheet.getRange(rowNum, startIndex + 1, 1, 4).clearContent();
+        sheet.getRange(rowNum, startIndex + 1, 1, driverWidth).clearContent();
       } else {
-        sheet.getRange(rowNum, startIndex + 5, 1, 3).clearContent();
+        sheet.getRange(rowNum, startIndex + driverWidth + 1, 1, riderWidth).clearContent();
       }
       return ContentService.createTextOutput("✅ Cleared row " + rowNum);
     }
 
     // Same-day withdrawal: keep the row, just mark the note cell "WITHDRAWN"
     if (action === "withdraw_note") {
-      var noteCol = role === "driver" ? startIndex + 4 : startIndex + 7;
+      var noteCol = role === "driver" ? startIndex + 4 : startIndex + driverWidth + 3;
       sheet.getRange(rowNum, noteCol, 1, 1).setValue("WITHDRAWN");
       return ContentService.createTextOutput("✅ Marked row " + rowNum + " WITHDRAWN");
     }
     
     // Sign up logic
     if (action === "add") {
+      var fr = payload.after_service || "";
       if (role === "driver") {
-        sheet.getRange(rowNum, startIndex + 1, 1, 4).setValues([[
-          payload.name, 
-          payload.seats, 
-          payload.phone, 
-          payload.info
-        ]]);
+        var driverRow = [payload.name, payload.seats, payload.phone, payload.info];
+        if (hasFR) driverRow.push(fr);
+        sheet.getRange(rowNum, startIndex + 1, 1, driverWidth).setValues([driverRow]);
       } else {
-        sheet.getRange(rowNum, startIndex + 5, 1, 3).setValues([[
-          payload.name, 
-          payload.phone, 
-          payload.info
-        ]]);
+        var riderRow = [payload.name, payload.phone, payload.info];
+        if (hasFR) riderRow.push(fr);
+        sheet.getRange(rowNum, startIndex + driverWidth + 1, 1, riderWidth).setValues([riderRow]);
       }
       return ContentService.createTextOutput("✅ Success adding to row " + rowNum);
     }

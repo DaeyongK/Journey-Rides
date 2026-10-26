@@ -10,6 +10,7 @@ from time_utils import (
     ride_type_for_date,
     ride_type_label,
     ANNOUNCEMENT_CATEGORIES,
+    asks_after_service,
     syncs_to_sheets,
 )
 from dashboard import refresh_dashboard_for_announcement
@@ -35,6 +36,39 @@ def get_school(member) -> str:
         if any(r.id == role_id for r in member.roles):
             return school
     return None
+
+AFTER_SERVICE_LABEL = "F for Food, R for return to campus"
+
+
+def after_service_input(default=None) -> discord.ui.TextInput:
+    # Sunday Service only: is this person going to food or back to campus after service?
+    field = discord.ui.TextInput(
+        label=AFTER_SERVICE_LABEL,
+        placeholder="F or R",
+        required=True,
+        min_length=1,
+        max_length=1,
+    )
+    if default:
+        field.default = default
+    return field
+
+
+# Returns 'F' / 'R', or raises ValueError("after_service") for anything else
+def parse_after_service(value: str) -> str:
+    choice = value.strip().upper()
+    if choice not in ("F", "R"):
+        raise ValueError("after_service")
+    return choice
+
+
+async def get_content_category(announcement_id):
+    row = await fetchone(
+        "SELECT content_category FROM announcements WHERE id=$1 AND reactable=$2",
+        (announcement_id, True)
+    )
+    return row[0] if row else "F"
+
 
 async def is_registered(announcement_id, user_id) -> bool:
     row = await fetchone(
@@ -283,7 +317,8 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
     phone = discord.ui.TextInput(label="Phone Number (e.g. 9999999999)", required=True)
     info = discord.ui.TextInput(label="Additional Information (Optional)", required=False)
 
-    def __init__(self, announcement_id, default_seats=None, default_number=None, default_info=None):
+    def __init__(self, announcement_id, default_seats=None, default_number=None, default_info=None,
+                 content_category=None, default_after_service=None):
         super().__init__()
         self.announcement_id = announcement_id
         if (default_seats or default_number):
@@ -291,6 +326,10 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
             self.phone.default = default_number
         if default_info:
             self.info.default = default_info
+        self.after_service = None
+        if asks_after_service(content_category):
+            self.after_service = after_service_input(default_after_service)
+            self.add_item(self.after_service)
 
     async def on_submit(self, interaction: discord.Interaction):
         # Instantly send the loading message
@@ -320,8 +359,12 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
             if len(self.info.value) > 130:
                 raise ValueError("info")
 
+            after_service = parse_after_service(self.after_service.value) if self.after_service else None
+
         except ValueError as e:
             # Edit ephemeral response if validation fails
+            if str(e) == "after_service":
+                await interaction.edit_original_response(content="❌ Please enter **F** (food) or **R** (return to campus).")
             if str(e) == "seats":
                 await interaction.edit_original_response(content="❌ Please enter a valid positive number of seats.")
             if str(e) == "phone":
@@ -337,11 +380,12 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
             row = await fetchone(
                 """
                 INSERT INTO ride_entries (
-                    announcement_id, user_id, school, role, seats, updated_at, phone, info, row_num, auto_assigned
+                    announcement_id, user_id, school, role, seats, updated_at, phone, info, row_num, auto_assigned,
+                    after_service
                 )
                 SELECT
                     $1, $2, $3, 'driver', $4, NOW(), $5, $6,
-                    COALESCE(MAX(row_num), 0) + 1, FALSE
+                    COALESCE(MAX(row_num), 0) + 1, FALSE, $7
                 FROM ride_entries
                 WHERE announcement_id = $1
                   AND role = 'driver'
@@ -352,11 +396,12 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
                     seats = EXCLUDED.seats,
                     phone = EXCLUDED.phone,
                     info = EXCLUDED.info,
+                    after_service = EXCLUDED.after_service,
                     updated_at = NOW(),
                     auto_assigned = FALSE
                 RETURNING row_num
                 """,
-                (self.announcement_id, interaction.user.id, school, seats, phone, info)
+                (self.announcement_id, interaction.user.id, school, seats, phone, info, after_service)
             )
 
         row_count = row["row_num"]
@@ -372,7 +417,8 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
                     phone=phone,
                     info=info,
                     count=row_count,
-                    content_category=content_category
+                    content_category=content_category,
+                    after_service=after_service
                 )
 
             if google_receipt is None:
@@ -414,11 +460,15 @@ class RiderModal(discord.ui.Modal, title = "Rider Info"):
     phone = discord.ui.TextInput(label="Phone Number (e.g. 9999999999)", required=True)
     info = discord.ui.TextInput(label="Additional Information (Optional)", required=False)
     # Have a "save info" button
-    def __init__(self, announcement_id, default_number):
+    def __init__(self, announcement_id, default_number, content_category=None):
         super().__init__()
         self.announcement_id = announcement_id
         if (default_number):
             self.phone.default = default_number
+        self.after_service = None
+        if asks_after_service(content_category):
+            self.after_service = after_service_input()
+            self.add_item(self.after_service)
 
     async def on_submit(self, interaction: discord.Interaction):
         # Instantly send the loading message
@@ -441,10 +491,14 @@ class RiderModal(discord.ui.Modal, title = "Rider Info"):
             info = self.info.value
             if len(self.info.value) > 130:
                 raise ValueError("info")
-            
+
+            after_service = parse_after_service(self.after_service.value) if self.after_service else None
+
         # Edit ephemeral message if validation fails
 
         except ValueError as e:
+            if str(e) == "after_service":
+                await interaction.edit_original_response(content="❌ Please enter **F** (food) or **R** (return to campus).")
             if str(e) == "phone":
                 await interaction.edit_original_response(content="❌ Please enter a valid phone number (e.g 9999999999 without dashes).")
             if str(e) == "info":
@@ -455,18 +509,19 @@ class RiderModal(discord.ui.Modal, title = "Rider Info"):
             row = await fetchone(
                 """
                 INSERT INTO ride_entries (
-                    announcement_id, user_id, school, role, seats, updated_at, phone, info, row_num
+                    announcement_id, user_id, school, role, seats, updated_at, phone, info, row_num,
+                    after_service
                 )
                 SELECT
                     $1, $2, $3, 'rider', NULL, NOW(), $4, $5,
-                    COALESCE(MAX(row_num), 0) + 1
+                    COALESCE(MAX(row_num), 0) + 1, $6
                 FROM ride_entries
                 WHERE announcement_id = $1
                   AND role = 'rider'
                   AND school = $3
                 RETURNING row_num;
                 """,
-                (self.announcement_id, interaction.user.id, school, phone, info)
+                (self.announcement_id, interaction.user.id, school, phone, info, after_service)
             )
         
         row_count = row["row_num"]
@@ -482,7 +537,8 @@ class RiderModal(discord.ui.Modal, title = "Rider Info"):
                     phone=phone,
                     info=info,
                     count=row_count,
-                    content_category=content_category
+                    content_category=content_category,
+                    after_service=after_service
                 )
 
             if google_receipt is None:
@@ -587,8 +643,10 @@ class RideView(discord.ui.View):
         if saved:
             default_number = saved["phone"]
 
+        content_category = await get_content_category(self.announcement_id)
+
         await interaction.response.send_modal(
-            RiderModal(self.announcement_id, default_number)
+            RiderModal(self.announcement_id, default_number, content_category)
         )
 
     async def driver_callback(self, interaction: discord.Interaction):
@@ -603,7 +661,7 @@ class RideView(discord.ui.View):
 
         existing = await fetchone(
             """
-            SELECT role, seats, phone, info
+            SELECT role, seats, phone, info, after_service
             FROM ride_entries
             WHERE announcement_id=$1 AND user_id=$2
             """,
@@ -623,11 +681,13 @@ class RideView(discord.ui.View):
         default_seats = None
         default_number = None
         default_info = None
+        default_after_service = None
 
         if existing:  # already a driver on this ride — prefill their current entry
             default_seats = existing["seats"] or None
             default_number = existing["phone"] or None
             default_info = existing["info"] or None
+            default_after_service = existing["after_service"]
         else:
             saved = await fetchone(
                 "SELECT seats, phone FROM saved_info WHERE user_id=$1",
@@ -637,8 +697,13 @@ class RideView(discord.ui.View):
                 default_seats = saved["seats"]
                 default_number = saved["phone"]
 
+        content_category = await get_content_category(self.announcement_id)
+
         await interaction.response.send_modal(
-            DriverModal(self.announcement_id, default_seats, default_number, default_info)
+            DriverModal(
+                self.announcement_id, default_seats, default_number, default_info,
+                content_category, default_after_service,
+            )
         )
 
     async def withdraw_callback(self, interaction: discord.Interaction):
@@ -657,7 +722,7 @@ class RideView(discord.ui.View):
                 """
                 DELETE FROM ride_entries
                 WHERE user_id=$1 AND announcement_id=$2
-                RETURNING school, role, seats, phone, info, row_num
+                RETURNING school, role, seats, phone, info, row_num, after_service
                 """,
                 (interaction.user.id, self.announcement_id)
             )
@@ -666,7 +731,7 @@ class RideView(discord.ui.View):
                 await interaction.edit_original_response(content="ℹ️ You are not registered for this announcement.")
                 return
 
-            school, role, seats, phone, info, user_count = entry
+            school, role, seats, phone, info, user_count, after_service = entry
             
             # Wait for Google Sheets response before confirming withdrawal to user.
             # On the day of the ride a rider's row is kept in the sheet and their
@@ -684,7 +749,8 @@ class RideView(discord.ui.View):
                     phone,
                     info,
                     user_count,
-                    content_category
+                    content_category,
+                    after_service
                 )
 
                 if google_receipt is None:

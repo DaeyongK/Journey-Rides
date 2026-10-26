@@ -19,7 +19,7 @@ async def render_dashboard(bot, announcement_id, title, end_at) -> list:
     # Aggregating Data
     rows = await fetchall(
         """
-        SELECT user_id, school, role, seats
+        SELECT user_id, school, role, seats, after_service
         FROM ride_entries
         WHERE announcement_id=$1
         ORDER BY school
@@ -30,7 +30,7 @@ async def render_dashboard(bot, announcement_id, title, end_at) -> list:
     data = {s: {"drivers": [], "riders": []} for s in SCHOOLS}
     guild = bot.get_guild(SERVER_ID)
 
-    for user_id, school, role, seats in rows:
+    for user_id, school, role, seats, after_service in rows:
         if school not in data:
             continue
 
@@ -46,15 +46,20 @@ async def render_dashboard(bot, announcement_id, title, end_at) -> list:
         if not member:
             continue
 
+        # Sunday Service: tag with F (food) / R (return to campus)
         name = f"{member.display_name}"
+        if after_service in ("F", "R"):
+            name += f" [{after_service}]"
+            counts = data[school].setdefault("after_service", {"F": 0, "R": 0})
+            counts[after_service] += 1
         if role == "driver":
             data[school]["drivers"].append((name, seats))
         else:
             data[school]["riders"].append(name)
 
-        for school in data:
-            data[school]["drivers"].sort(key=lambda x: x[0].casefold())
-            data[school]["riders"].sort(key=lambda x: x.casefold())
+    for school in data:
+        data[school]["drivers"].sort(key=lambda x: x[0].casefold())
+        data[school]["riders"].sort(key=lambda x: x.casefold())
 
     # Creating First Page Cover (1/4)
     cover = discord.Embed(
@@ -102,6 +107,9 @@ async def render_dashboard(bot, announcement_id, title, end_at) -> list:
         rider_count = len(riders)
         status = "✅" if seat_total >= rider_count else "❌"
 
+        fr = data[school].get("after_service")
+        fr_line = f"\nFood (F): **{fr['F']}** | Return to campus (R): **{fr['R']}**" if fr else ""
+
         embeds.append(
             discord.Embed(
                 title=f"🏫 {school} — Ride Signups",
@@ -110,6 +118,7 @@ async def render_dashboard(bot, announcement_id, title, end_at) -> list:
                     f"**Riders**\n{rider_lines}\n\n"
                     f"**Summary**\n"
                     f"Seats: **{seat_total}** | Riders: **{rider_count}** {status}"
+                    f"{fr_line}"
                 ),
                 color=discord.Color.blue()
             )

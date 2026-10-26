@@ -23,6 +23,14 @@ def syncs_to_sheets(content_category) -> bool:
     return content_category in SHEET_CATEGORIES
 
 
+# Categories whose signups ask "F for Food, R for return to campus" (after service)
+AFTER_SERVICE_CATEGORIES = ("S",)
+
+
+def asks_after_service(content_category) -> bool:
+    return content_category in AFTER_SERVICE_CATEGORIES
+
+
 # Returns the current UTC timestamp
 def now():
     return datetime.now(timezone.utc)
