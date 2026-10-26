@@ -58,6 +58,10 @@ CREATE TABLE IF NOT EXISTS ride_entries (
     -- assignments change.
     auto_assigned BOOLEAN NOT NULL DEFAULT FALSE,
 
+    -- Sunday Service only: what this person does after service.
+    -- 'F' = going to food, 'R' = returning to campus. NULL when not asked.
+    after_service TEXT CHECK (after_service IN ('F', 'R')),
+
     PRIMARY KEY (announcement_id, user_id)
 );
 
@@ -191,6 +195,9 @@ ALTER TABLE announcements
 
 ALTER TABLE ride_entries
     ADD COLUMN IF NOT EXISTS auto_assigned BOOLEAN NOT NULL DEFAULT FALSE;
+
+ALTER TABLE ride_entries
+    ADD COLUMN IF NOT EXISTS after_service TEXT CHECK (after_service IN ('F', 'R'));
 
 ALTER TABLE availability_occurrences
     ADD COLUMN IF NOT EXISTS schools TEXT NOT NULL DEFAULT 'GT,Emory';
