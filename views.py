@@ -37,14 +37,14 @@ def get_school(member) -> str:
             return school
     return None
 
-AFTER_SERVICE_LABEL = "F for Food, R for return to campus"
+AFTER_SERVICE_LABEL = "F = Food, R = Return to campus, N = No pref"
 
 
 def after_service_input(default=None) -> discord.ui.TextInput:
     # Sunday Service only: is this person going to food or back to campus after service?
     field = discord.ui.TextInput(
         label=AFTER_SERVICE_LABEL,
-        placeholder="F or R",
+        placeholder="F, R, or N",
         required=True,
         min_length=1,
         max_length=1,
@@ -54,10 +54,10 @@ def after_service_input(default=None) -> discord.ui.TextInput:
     return field
 
 
-# Returns 'F' / 'R', or raises ValueError("after_service") for anything else
+# Returns 'F' / 'R' / 'N', or raises ValueError("after_service") for anything else
 def parse_after_service(value: str) -> str:
     choice = value.strip().upper()
-    if choice not in ("F", "R"):
+    if choice not in ("F", "R", "N"):
         raise ValueError("after_service")
     return choice
 
@@ -364,7 +364,7 @@ class DriverModal(discord.ui.Modal, title="Driver Info"):
         except ValueError as e:
             # Edit ephemeral response if validation fails
             if str(e) == "after_service":
-                await interaction.edit_original_response(content="❌ Please enter **F** (food) or **R** (return to campus).")
+                await interaction.edit_original_response(content="❌ Please enter **F** (food), **R** (return to campus), or **N** (no preference).")
             if str(e) == "seats":
                 await interaction.edit_original_response(content="❌ Please enter a valid positive number of seats.")
             if str(e) == "phone":
@@ -498,7 +498,7 @@ class RiderModal(discord.ui.Modal, title = "Rider Info"):
 
         except ValueError as e:
             if str(e) == "after_service":
-                await interaction.edit_original_response(content="❌ Please enter **F** (food) or **R** (return to campus).")
+                await interaction.edit_original_response(content="❌ Please enter **F** (food), **R** (return to campus), or **N** (no preference).")
             if str(e) == "phone":
                 await interaction.edit_original_response(content="❌ Please enter a valid phone number (e.g 9999999999 without dashes).")
             if str(e) == "info":

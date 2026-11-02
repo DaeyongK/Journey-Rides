@@ -55,7 +55,7 @@ function doPost(e) {
     // Column layout per school block (1-based offsets from startIndex):
     //   Friday PM / Special Event (8 wide):
     //     driver: name, seats, phone, info | rider: name, phone, info | blank
-    //   Sunday Service (10 wide, adds F/R = Food or Return to campus):
+    //   Sunday Service (10 wide, adds F/R = Food, Return to campus, or N = No preference):
     //     driver: name, seats, phone, info, F/R | rider: name, phone, info, F/R | blank
     var hasFR = content === "S";
     var driverWidth = hasFR ? 5 : 4;

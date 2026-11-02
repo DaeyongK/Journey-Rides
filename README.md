@@ -205,7 +205,7 @@ Each school (GT, Emory, GSU, left to right) gets its own block of columns:
 | `Friday PM Imports`, `Special Event Imports` (8) | Driver name, seats, phone, info · Rider name, phone, info · *(blank)* |
 | `Sunday Service Imports` (10) | Driver name, seats, phone, info, **F/R** · Rider name, phone, info, **F/R** · *(blank)* |
 
-**F/R** is the Sunday Service signup question "F for Food, R for return to campus".
+**F/R** is the Sunday Service signup question "F = Food, R = Return to campus, N = No preference".
 
 ---
 

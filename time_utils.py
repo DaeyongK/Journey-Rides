@@ -23,7 +23,7 @@ def syncs_to_sheets(content_category) -> bool:
     return content_category in SHEET_CATEGORIES
 
 
-# Categories whose signups ask "F for Food, R for return to campus" (after service)
+# Categories whose signups ask F (food) / R (return to campus) / N (no preference) after service
 AFTER_SERVICE_CATEGORIES = ("S",)
 
 
