@@ -46,11 +46,11 @@ async def render_dashboard(bot, announcement_id, title, end_at) -> list:
         if not member:
             continue
 
-        # Sunday Service: tag with F (food) / R (return to campus)
+        # Sunday Service: tag with F (food) / R (return to campus) / N (no preference)
         name = f"{member.display_name}"
-        if after_service in ("F", "R"):
+        if after_service in ("F", "R", "N"):
             name += f" [{after_service}]"
-            counts = data[school].setdefault("after_service", {"F": 0, "R": 0})
+            counts = data[school].setdefault("after_service", {"F": 0, "R": 0, "N": 0})
             counts[after_service] += 1
         if role == "driver":
             data[school]["drivers"].append((name, seats))
@@ -108,7 +108,10 @@ async def render_dashboard(bot, announcement_id, title, end_at) -> list:
         status = "✅" if seat_total >= rider_count else "❌"
 
         fr = data[school].get("after_service")
-        fr_line = f"\nFood (F): **{fr['F']}** | Return to campus (R): **{fr['R']}**" if fr else ""
+        fr_line = (
+            f"\nFood (F): **{fr['F']}** | Return to campus (R): **{fr['R']}**"
+            f" | No preference (N): **{fr['N']}**"
+        ) if fr else ""
 
         embeds.append(
             discord.Embed(
