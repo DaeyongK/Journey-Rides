@@ -1,5 +1,6 @@
 import asyncio
 import os
+from contextlib import asynccontextmanager
 import asyncpg
 from dotenv import load_dotenv
 load_dotenv()
@@ -23,6 +24,14 @@ async def init_db():
 
     async with _pool.acquire() as conn:
         await conn.execute(schema)
+
+
+@asynccontextmanager
+async def transaction():
+    """Yields a connection whose queries commit (or roll back) together."""
+    async with _pool.acquire() as conn:
+        async with conn.transaction():
+            yield conn
 
 
 async def execute(query, params=()):

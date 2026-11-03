@@ -1,7 +1,7 @@
 import asyncio
 import os
 import discord
-from db import execute, fetchone, row_lock
+from db import execute, fetchone, row_lock, transaction
 from exporter import remove_from_sheets, sync_to_sheets, mark_withdrawn_in_sheets
 from time_utils import (
     format_close_time,
@@ -60,6 +60,26 @@ def parse_after_service(value: str) -> str:
     if choice not in ("F", "R", "N"):
         raise ValueError("after_service")
     return choice
+
+
+# Background tasks need a strong reference or they can be garbage-collected mid-run
+_background_tasks = set()
+
+
+def _spawn(coro):
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+
+
+async def _refresh_schedules(bot, poll_ids):
+    # Imported here: availability imports views, so a top-level import would be circular
+    from availability import refresh_admin_message
+    for poll_id in poll_ids:
+        try:
+            await refresh_admin_message(bot, poll_id)
+        except Exception as e:
+            print(f"[withdraw] admin schedule refresh failed for {poll_id}: {e}")
 
 
 async def get_content_category(announcement_id):
@@ -718,21 +738,36 @@ class RideView(discord.ui.View):
         ride_date = cat_record[1] if cat_record else None
 
         try:
-            entry = await fetchone(
-                """
-                DELETE FROM ride_entries
-                WHERE user_id=$1 AND announcement_id=$2
-                RETURNING school, role, seats, phone, info, row_num, after_service
-                """,
-                (interaction.user.id, self.announcement_id)
-            )
-        
+            from availability import release_driver_from_schedule  # circular import
+
+            # Withdrawing also takes the user off the availability schedule for this
+            # ride, in the same transaction, so no later sync signs them back up.
+            # Done for riders too: someone scheduled to drive may have signed up as
+            # a rider, and leaving the assignment would re-add them as a driver.
+            released_polls = []
+            async with transaction() as conn:
+                entry = await conn.fetchrow(
+                    """
+                    DELETE FROM ride_entries
+                    WHERE user_id=$1 AND announcement_id=$2
+                    RETURNING school, role, seats, phone, info, row_num, after_service
+                    """,
+                    interaction.user.id, self.announcement_id,
+                )
+                if entry:
+                    released_polls = await release_driver_from_schedule(
+                        conn, interaction.user.id, ride_date, content_category
+                    )
+
             if not entry:
                 await interaction.edit_original_response(content="ℹ️ You are not registered for this announcement.")
                 return
 
             school, role, seats, phone, info, user_count, after_service = entry
-            
+
+            if released_polls:
+                _spawn(_refresh_schedules(interaction.client, released_polls))
+
             # Wait for Google Sheets response before confirming withdrawal to user.
             # On the day of the ride a rider's row is kept in the sheet and their
             # note is set to "WITHDRAWN" instead of clearing the row (coordinators
