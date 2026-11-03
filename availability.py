@@ -468,6 +468,37 @@ async def topup_assignment_for_user(bot, poll_id, user_id, school):
     return to_add
 
 
+async def release_driver_from_schedule(conn, user_id, ride_date, ride_type):
+    """A user withdrew from a ride: take them off the schedule for it and clear
+    that date from their availability.
+
+    Without this their assignment stays behind and the next reconcile (another
+    driver's top-up, Assign / Adjust, announcement send) signs them back up.
+    Clearing the availability keeps a full Assign re-run from re-picking them.
+
+    Runs on the caller's connection so it commits together with the withdrawal
+    itself. Returns the poll ids whose schedule changed (to refresh).
+    """
+    if not ride_date or ride_type not in ("F", "S"):
+        return []
+    released = await conn.fetch(
+        """
+        DELETE FROM availability_assignments
+        WHERE user_id=$1 AND ride_date=$2 AND ride_type=$3
+        RETURNING poll_id
+        """,
+        user_id, ride_date, ride_type,
+    )
+    await conn.execute(
+        """
+        DELETE FROM availability_entries
+        WHERE user_id=$1 AND ride_date=$2 AND ride_type=$3
+        """,
+        user_id, ride_date, ride_type,
+    )
+    return sorted({r["poll_id"] for r in released}, key=str)
+
+
 # ─────────────────────────────────────────────────────────────
 # Announcement pipeline
 # ─────────────────────────────────────────────────────────────
@@ -533,13 +564,21 @@ async def prefill_announcement_drivers(bot, announcement_id, ride_date, content_
                     announcement_id, user_id, school, role, seats, updated_at, phone, info, row_num, auto_assigned
                 )
                 SELECT $1, $2, $3, 'driver', $4, NOW(), $5, '',
-                       COALESCE(MAX(row_num), 0) + 1, TRUE
-                FROM ride_entries
-                WHERE announcement_id = $1 AND role = 'driver' AND school = $3
+                       COALESCE((
+                           SELECT MAX(row_num) FROM ride_entries
+                           WHERE announcement_id = $1 AND role = 'driver' AND school = $3
+                       ), 0) + 1,
+                       TRUE
+                -- Re-check the assignment at insert time: the driver may have
+                -- withdrawn (and been taken off the schedule) since it was read.
+                WHERE EXISTS (
+                    SELECT 1 FROM availability_assignments
+                    WHERE user_id = $2 AND ride_date = $6 AND ride_type = $7
+                )
                 ON CONFLICT (announcement_id, user_id) DO NOTHING
                 RETURNING row_num
                 """,
-                (announcement_id, user_id, school, seats, phone),
+                (announcement_id, user_id, school, seats, phone, ride_date, content_category),
             )
         if row is None:
             continue
