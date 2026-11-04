@@ -313,18 +313,6 @@ async def write_assignments(poll_id, assignments, assigned_by="auto"):
     )
 
 
-async def remove_assignment(poll_id, user_id, ride_date, ride_type) -> bool:
-    row = await fetchone(
-        """
-        DELETE FROM availability_assignments
-        WHERE poll_id=$1 AND user_id=$2 AND ride_date=$3 AND ride_type=$4
-        RETURNING 1
-        """,
-        (poll_id, user_id, ride_date, ride_type),
-    )
-    return row is not None
-
-
 async def get_assignments(poll_id):
     rows = await fetchall(
         "SELECT user_id, ride_date, ride_type, school, assigned_by FROM availability_assignments WHERE poll_id=$1",
@@ -462,7 +450,6 @@ async def topup_assignment_for_user(bot, poll_id, user_id, school):
         f"**{who}** added availability after assignment and was placed on:",
     ]
     lines += [f"• {occurrence_label(d, t)}" for d, t in to_add]
-    lines.append("Use the ✏️ Adjust button on the schedule to change this.")
     await _send_admin_note(bot, lines)
 
     return to_add
@@ -473,7 +460,7 @@ async def release_driver_from_schedule(conn, user_id, ride_date, ride_type):
     that date from their availability.
 
     Without this their assignment stays behind and the next reconcile (another
-    driver's top-up, Assign / Adjust, announcement send) signs them back up.
+    driver's top-up, Assign, announcement send) signs them back up.
     Clearing the availability keeps a full Assign re-run from re-picking them.
 
     Runs on the caller's connection so it commits together with the withdrawal
@@ -515,7 +502,7 @@ async def prefill_announcement_drivers(bot, announcement_id, ride_date, content_
     to the admin channel and must sign up manually.
 
     Safe to call repeatedly (idempotent). Runs both when an announcement is sent
-    and whenever assignments change (the Assign / Adjust admin buttons).
+    and whenever assignments change (Assign button, late-availability top-ups).
     """
     if not ride_date or content_category not in ("F", "S"):
         return
@@ -834,8 +821,7 @@ async def render_schedule_embeds(bot, poll_id, assignments=None) -> list:
         description=(
             f"Status: **{state}** · drivers auto-assigned toward each ride's base "
             f"target ({target_bits or 'none set'}; all others ×{DEFAULT_ASSIGN_TARGET}), "
-            "load spread evenly.\n"
-            "Add or swap drivers for a specific week with the ✏️ Adjust button below."
+            "load spread evenly."
         ),
         color=discord.Color.green(),
     )
@@ -981,39 +967,8 @@ async def run_assign(bot, poll) -> str:
 
     return (
         f"✅ Auto-assigned drivers for `{poll['month']}` and posted the schedule to the admin channel."
-        f"{note}\n\n*Manual edits were cleared — use the ✏️ Adjust button to layer them back on.*"
+        f"{note}"
     )
-
-
-async def run_adjust(bot, poll_id, ride_date, ride_type, user, add: bool, assigned_by) -> str:
-    """Add or remove one driver for a single ride, then refresh the admin
-    message and any already-sent announcement for that ride."""
-    label = occurrence_label(ride_date, ride_type)
-    if add:
-        member = user if isinstance(user, discord.Member) else await _resolve_member(
-            bot.get_guild(SERVER_ID), user.id
-        )
-        school = get_school(member) if member else None
-        if school not in SCHOOLS:
-            return (
-                f"❌ {user.display_name} isn't in a school that uses the availability "
-                f"system ({', '.join(SCHOOLS)})."
-            )
-        await write_assignments(
-            poll_id, [(user.id, ride_date, ride_type, school)], assigned_by=assigned_by
-        )
-        verb = "Added"
-    else:
-        if not await remove_assignment(poll_id, user.id, ride_date, ride_type):
-            return f"ℹ️ {user.display_name} was not assigned to {label}."
-        verb = "Removed"
-
-    await refresh_admin_message(bot, poll_id)
-
-    # Push the change into any already-sent announcement for this ride
-    synced = await sync_assignments_to_announcements(bot, ride_date, ride_type)
-    tail = f" Updated {synced} already-sent announcement(s)." if synced else ""
-    return f"✅ {verb} {user.display_name} — {label}.{tail}"
 
 
 async def run_close(bot, poll) -> str:
@@ -1205,7 +1160,7 @@ def _is_admin(interaction: discord.Interaction) -> bool:
 # Admin control panel (persistent, under the admin message)
 # ─────────────────────────────────────────────────────────────
 class AdminPanelView(discord.ui.View):
-    """Assign / Adjust / Availability / Close buttons. Buttons don't inherit a
+    """Assign / Availability / Close buttons. Buttons don't inherit a
     slash command's default_permissions, so every press checks manage_messages."""
 
     def __init__(self, poll_id, state: str):
@@ -1216,7 +1171,6 @@ class AdminPanelView(discord.ui.View):
             "Re-assign drivers" if state == "assigned" else "Assign drivers",
             "🚗", discord.ButtonStyle.primary, "assign", self._on_assign, disabled=closed,
         )
-        self._button("Adjust", "✏️", discord.ButtonStyle.secondary, "adjust", self._on_adjust)
         self._button("Availability", "📋", discord.ButtonStyle.secondary, "availability", self._on_availability)
         self._button("Close poll", "🔒", discord.ButtonStyle.danger, "close", self._on_close, disabled=closed)
 
@@ -1256,25 +1210,14 @@ class AdminPanelView(discord.ui.View):
             return
         if poll["state"] == "assigned":
             await interaction.response.send_message(
-                f"⚠️ Re-assigning recomputes all of `{poll['month']}` and **clears manual "
-                "edits** made with ✏️ Adjust. Continue?",
+                f"⚠️ Re-assigning recomputes all of `{poll['month']}` and **replaces the "
+                "current schedule**. Continue?",
                 view=ConfirmView("Re-assign", lambda: run_assign(interaction.client, poll)),
                 ephemeral=True,
             )
             return
         await interaction.response.defer(ephemeral=True, thinking=True)
         await interaction.followup.send(await run_assign(interaction.client, poll), ephemeral=True)
-
-    async def _on_adjust(self, interaction: discord.Interaction):
-        poll = await self._poll(interaction)
-        if not poll:
-            return
-        await interaction.response.send_message(
-            f"✏️ **Adjust `{poll['month']}`** — pick a ride and a driver, then **Add** or "
-            "**Remove**. Repeat as needed.",
-            view=AdjustView(poll["id"], await get_occurrences(poll["id"])),
-            ephemeral=True,
-        )
 
     async def _on_availability(self, interaction: discord.Interaction):
         poll = await self._poll(interaction)
@@ -1294,7 +1237,7 @@ class AdminPanelView(discord.ui.View):
             return
         await interaction.response.send_message(
             f"🔒 Close the `{poll['month']}` poll? Drivers will no longer be able to submit "
-            "availability. The schedule can still be adjusted afterwards.",
+            "availability. The schedule stays as assigned.",
             view=ConfirmView("Close poll", lambda: run_close(interaction.client, poll)),
             ephemeral=True,
         )
@@ -1324,64 +1267,10 @@ class ConfirmView(discord.ui.View):
         await interaction.response.edit_message(content="Cancelled.", view=None)
 
 
-class AdjustView(discord.ui.View):
-    """Ephemeral picker: one ride + one driver, then Add or Remove."""
-
-    def __init__(self, poll_id, occurrences):
-        super().__init__(timeout=600)
-        self.poll_id = poll_id
-        self.ride = discord.ui.Select(
-            placeholder="Ride…",
-            options=[
-                discord.SelectOption(
-                    label=occurrence_label(d, t), value=encode_occurrence(d, t)
-                )
-                for d, t in list(occurrences)[:MAX_OPTIONS]
-            ],
-        )
-        self.ride.callback = self._ack
-        self.add_item(self.ride)
-
-        self.driver = discord.ui.UserSelect(placeholder="Driver…")
-        self.driver.callback = self._ack
-        self.add_item(self.driver)
-
-        for label, style, add in (
-            ("Add", discord.ButtonStyle.success, True),
-            ("Remove", discord.ButtonStyle.danger, False),
-        ):
-            button = discord.ui.Button(label=label, style=style)
-            button.callback = self._on_add if add else self._on_remove
-            self.add_item(button)
-
-    async def _ack(self, interaction: discord.Interaction):
-        await interaction.response.defer()
-
-    async def _on_add(self, interaction: discord.Interaction):
-        await self._apply(interaction, add=True)
-
-    async def _on_remove(self, interaction: discord.Interaction):
-        await self._apply(interaction, add=False)
-
-    async def _apply(self, interaction: discord.Interaction, add: bool):
-        if not self.ride.values or not self.driver.values:
-            await interaction.response.send_message(
-                "❌ Pick a ride and a driver first.", ephemeral=True
-            )
-            return
-        await interaction.response.defer(ephemeral=True, thinking=True)
-        ride_date, ride_type = decode_occurrence(self.ride.values[0])
-        reply = await run_adjust(
-            interaction.client, self.poll_id, ride_date, ride_type,
-            self.driver.values[0], add, interaction.user.display_name,
-        )
-        await interaction.followup.send(reply, ephemeral=True)
-
-
 async def restore_views(bot):
     """Re-register persistent views on startup: the dropdown of every poll that
     isn't closed (a closed poll's dropdown is disabled, so it needs no handler),
-    and every poll's admin control panel (Adjust still works once closed)."""
+    and every poll's admin control panel (Availability still works once closed)."""
     rows = await fetchall(
         """
         SELECT m.poll_id, m.school
@@ -1441,7 +1330,7 @@ class AvailabilityCommands(commands.Cog):
         if existing:
             await interaction.response.send_message(
                 f"❌ An availability check has already been run for `{month}` (state: {existing['state']}). "
-                "A month can only be sent once. Use the buttons on its message in the admin channel to view, assign, adjust or close it.",
+                "A month can only be sent once. Use the buttons on its message in the admin channel to view, assign or close it.",
                 ephemeral=True,
             )
             return
@@ -1561,7 +1450,7 @@ class AvailabilityCommands(commands.Cog):
             f"✅ Availability poll created for `{month}` (`{poll_id}`).\n"
             + "\n".join(posted)
             + "\nA live availability display was posted to the admin channel — use its "
-            "buttons to assign, adjust, view availability and close the poll."
+            "buttons to assign, view availability and close the poll."
             + host_note
             + note,
             ephemeral=True,
